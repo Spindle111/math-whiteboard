@@ -1,0 +1,3006 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Math Tutoring Whiteboard</title>
+<meta name="description" content="A free live whiteboard for math tutoring: pen, equations, graphs, number lines and a shared board with no login.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Sans:opsz,wght@9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<script id="lib-peer" src="https://cdn.jsdelivr.net/npm/peerjs@1.5.5/dist/peerjs.min.js" async></script>
+<style>
+:root{
+  --accent:#2b59c3; --accent-soft:#e7eefc;
+  --panel:#ffffff; --panel-2:#f5f6f8; --line:#e2e5ea; --text:#1d2330; --muted:#6b7280;
+  --shadow:0 6px 24px rgba(20,28,45,.10), 0 1px 3px rgba(20,28,45,.08);
+  --danger:#d64545;
+}
+body[data-chrome="dark"]{
+  --accent:#7ea6ff; --accent-soft:rgba(126,166,255,.16);
+  --panel:#1f232c; --panel-2:#272c37; --line:#343a47; --text:#e8eaf0; --muted:#9aa3b2;
+  --shadow:0 6px 24px rgba(0,0,0,.35), 0 1px 3px rgba(0,0,0,.3);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;font-family:"DM Sans",system-ui,sans-serif;color:var(--text);-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
+#board{position:fixed;inset:0;width:100%;height:100%;touch-action:none;display:block}
+#board.tool-pen,#board.tool-hl,#board.tool-shape{cursor:crosshair}
+#board.tool-eraser{cursor:cell}
+#board.tool-text{cursor:text}
+#board.tool-math{cursor:copy}
+#board.tool-hand,#board.panning{cursor:grab}
+#board.panning:active{cursor:grabbing}
+#board.tool-laser{cursor:none}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow)}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+input,textarea,select{font:inherit;color:var(--text)}
+
+/* top bar */
+#topbar{position:fixed;top:10px;left:10px;right:10px;display:flex;gap:8px;align-items:center;pointer-events:none;z-index:20}
+#topbar > *{pointer-events:auto}
+.group{display:flex;align-items:center;gap:2px;padding:4px;height:44px}
+.brand{display:flex;align-items:center;gap:8px;padding:0 12px 0 10px;font-weight:700;letter-spacing:-.01em;font-size:15px;white-space:nowrap}
+.brand-mark{width:24px;height:24px;border-radius:7px;background:var(--accent);display:grid;place-items:center;color:#fff;font-size:14px;font-weight:700}
+.ibtn{height:34px;min-width:34px;border-radius:9px;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 8px;color:var(--text);font-size:13.5px;font-weight:500;white-space:nowrap}
+.ibtn:hover{background:var(--panel-2)}
+.ibtn:disabled{opacity:.35;cursor:default;background:none}
+.ibtn.on{background:var(--accent-soft);color:var(--accent)}
+.ibtn svg{width:20px;height:20px;flex:none}
+.spacer{flex:1}
+.pagelabel{font-size:13.5px;font-weight:600;min-width:64px;text-align:center;font-variant-numeric:tabular-nums}
+.sep{width:1px;height:22px;background:var(--line);margin:0 4px}
+#timerChip.running{color:var(--accent)}
+#timerChip.done{color:#fff;background:var(--danger);animation:pulse 1s infinite}
+@keyframes pulse{50%{opacity:.6}}
+#liveChip .dot{width:8px;height:8px;border-radius:50%;background:#9aa3b2}
+#liveChip.connected .dot{background:#2fb344;box-shadow:0 0 0 3px rgba(47,179,68,.2)}
+.avatars{display:flex;margin-left:2px}
+.avatars span{width:20px;height:20px;border-radius:50%;border:2px solid var(--panel);margin-left:-6px;display:grid;place-items:center;font-size:10px;font-weight:700;color:#fff}
+
+/* left toolbar */
+#dock{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);z-index:19;width:max-content}
+#dock #stylebar{position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);white-space:nowrap}
+#toolbar{display:flex;flex-direction:row;align-items:center;gap:2px;padding:5px}
+#toolbar::-webkit-scrollbar{display:none}
+.tbtn{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:var(--text);position:relative}
+.tbtn:hover{background:var(--panel-2)}
+.tbtn.on{background:var(--accent);color:#fff}
+.tbtn svg{width:21px;height:21px}
+.tbtn .more{position:absolute;right:3px;bottom:3px;width:0;height:0;border-left:4px solid transparent;border-bottom:4px solid currentColor;opacity:.6}
+.tsep{width:1px;height:24px;background:var(--line);margin:0 4px}
+.tip{position:fixed;background:#1d2330;color:#fff;font-size:12px;padding:5px 8px;border-radius:7px;pointer-events:none;z-index:100;white-space:nowrap;opacity:0;transition:opacity .12s}
+.tip kbd{font-family:inherit;opacity:.65;margin-left:6px}
+#shapeFly{position:fixed;display:none;gap:2px;padding:5px;z-index:30}
+#shapeFly.open{display:flex}
+
+/* style bar */
+#stylebar{display:flex;align-items:center;gap:4px;padding:6px 8px}
+#stylebar.hidden{visibility:hidden}
+.sw{width:26px;height:26px;border-radius:50%;border:2px solid transparent;display:grid;place-items:center}
+.sw i{width:18px;height:18px;border-radius:50%;display:block;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
+.sw.on{border-color:var(--accent)}
+#swatches{display:grid!important;grid-template-columns:repeat(8,26px);gap:2px!important}
+.sw.wheel{background:conic-gradient(#e03131,#f0b400,#74b816,#0c8599,#1c4fd0,#7048e8,#e64980,#e03131);border-radius:50%;border:2px solid var(--panel)}
+.sw.wheel i{background:transparent;box-shadow:none;width:12px;height:12px}
+.sw.wheel.on{box-shadow:0 0 0 2px var(--accent)}
+.sw.wheel.on i{width:14px;height:14px;box-shadow:0 0 0 2px var(--panel)}
+#gridPop{padding:12px;min-width:0}
+.cgrid{display:grid;grid-template-columns:repeat(12,1fr);border-radius:10px;overflow:hidden;width:min(312px,calc(100vw - 44px))}
+.cgrid button{aspect-ratio:1;display:block;border-radius:0;position:relative}
+.cgrid button:hover{z-index:1;box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--text)}
+.cgrid button.on{z-index:2;box-shadow:inset 0 0 0 2px #fff,0 0 0 2px #1d2330}
+.crecent{display:flex;gap:6px;align-items:center;margin-top:10px;font-size:12px;color:var(--muted)}
+.crecent button{width:24px;height:24px;border-radius:50%;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
+#swatches.off,#stylebar .sep.off{display:none!important}
+.sw.custom{position:relative;cursor:pointer;background:conic-gradient(#e03131,#f0b400,#2f9e44,#0c8599,#1c4fd0,#7048e8,#e64980,#e03131);border-radius:50%;border:2px solid var(--panel);box-shadow:0 0 0 1px var(--line)}
+.sw.custom input{position:absolute;inset:0;opacity:0;cursor:pointer;width:100%;height:100%;border:0;padding:0}
+
+.sz{width:30px;height:30px;border-radius:8px;display:grid;place-items:center}
+.sz:hover{background:var(--panel-2)}
+.sz.on{background:var(--accent-soft)}
+.sz i{display:block;border-radius:50%;background:var(--text)}
+
+/* zoom */
+#zoombar{position:fixed;right:10px;top:10px;height:44px;display:flex;align-items:center;gap:2px;padding:4px;z-index:20}
+#zoomLabel{font-size:12.5px;font-weight:600;min-width:48px;font-variant-numeric:tabular-nums}
+
+/* popovers */
+.pop{position:fixed;z-index:40;padding:8px;display:none;min-width:200px;max-width:calc(100vw - 20px)}
+.pop.open{display:block}
+.menu-item{display:flex;align-items:center;gap:10px;width:100%;padding:8px 10px;border-radius:8px;font-size:13.5px;text-align:left}
+.menu-item:hover{background:var(--panel-2)}
+.menu-item svg{width:18px;height:18px;opacity:.75}
+.menu-item .k{margin-left:auto;color:var(--muted);font-size:12px}
+.menu-item.danger{color:var(--danger)}
+.menu-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:8px 10px 4px}
+.chips{display:flex;flex-wrap:wrap;gap:4px;padding:2px 6px 6px}
+.chip{padding:5px 10px;border-radius:999px;border:1px solid var(--line);font-size:12.5px;font-weight:500}
+.chip:hover{background:var(--panel-2)}
+.chip.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.menu-sep{height:1px;background:var(--line);margin:6px 4px}
+
+/* editor panels */
+.editor{position:fixed;z-index:45;width:340px;padding:14px;display:none}
+.editor.open{display:block}
+.editor h3{margin:0 0 10px;font-size:15px;display:flex;align-items:center;gap:8px}
+.editor h3 .x{margin-left:auto}
+.field{width:100%;border:1px solid var(--line);background:var(--panel-2);border-radius:9px;padding:8px 10px;font-size:14px;outline:none}
+.field:focus{border-color:var(--accent);background:var(--panel)}
+textarea.field{resize:vertical;min-height:64px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:13.5px;-webkit-user-select:text;user-select:text}
+input.field{-webkit-user-select:text;user-select:text}
+.preview{min-height:56px;border:1px dashed var(--line);border-radius:9px;margin:8px 0;display:grid;place-items:center;padding:8px;overflow:auto;background:#fff;color:#1d2330}
+.preview svg{max-width:100%}
+.preview .err{color:var(--danger);font-size:12.5px}
+.qgrid{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin-bottom:10px}
+.qgrid button{height:32px;border-radius:7px;background:var(--panel-2);font-size:14px}
+.qgrid button:hover{background:var(--accent-soft);color:var(--accent)}
+.row{display:flex;gap:8px;align-items:center}
+.row + .row{margin-top:8px}
+.btn{height:36px;padding:0 14px;border-radius:9px;font-weight:600;font-size:13.5px;background:var(--panel-2)}
+.btn:hover{filter:brightness(.97)}
+.btn.primary{background:var(--accent);color:#fff}
+.btn.danger{color:var(--danger)}
+.hint{font-size:12px;color:var(--muted);line-height:1.45;margin:6px 0 10px}
+.fnrow{display:flex;gap:6px;align-items:center;margin-bottom:6px}
+.fnrow .cdot{width:22px;height:22px;border-radius:50%;flex:none;box-shadow:inset 0 0 0 1px rgba(0,0,0,.15)}
+.fnrow .field{padding:7px 9px}
+.fnrow .bad{border-color:var(--danger)}
+.range{display:grid;grid-template-columns:auto 1fr auto 1fr;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
+.range .field{padding:6px 8px}
+.mini{font-size:12px;padding:5px 9px;border-radius:7px;background:var(--panel-2);font-weight:500}
+.mini:hover{background:var(--accent-soft);color:var(--accent)}
+
+#textEditor{position:fixed;z-index:44;display:none;background:transparent;border:1.5px dashed var(--accent);border-radius:4px;outline:none;resize:none;overflow:hidden;padding:0 2px;line-height:1.25;font-family:"DM Sans",sans-serif;white-space:pre;-webkit-user-select:text;user-select:text}
+
+/* pdf picker */
+#modal.wide{width:min(760px,calc(100vw - 32px))}
+.pdfgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(118px,1fr));gap:10px;max-height:min(52vh,480px);overflow:auto;padding:4px;background:var(--panel-2);border-radius:10px}
+.pdftile{position:relative;border-radius:8px;padding:6px 6px 22px;background:var(--panel);border:2px solid var(--line);display:flex;justify-content:center;align-items:flex-start;min-height:120px;opacity:.55;transition:opacity .12s,border-color .12s}
+.pdftile.on{border-color:var(--accent);opacity:1}
+.pdftile canvas,.pdftile .ph{width:100%;height:auto;display:block;box-shadow:0 1px 3px rgba(0,0,0,.18);background:#fff}
+.pdftile .ph{aspect-ratio:8.5/11;background:repeating-linear-gradient(135deg,#f3f4f6 0 8px,#e9ebef 8px 16px)}
+.pdftile span{position:absolute;bottom:3px;left:0;right:0;text-align:center;font-size:12px;font-weight:600;color:var(--muted)}
+.pdftile i{position:absolute;top:2px;right:2px;width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;font-style:normal;font-size:13px;font-weight:700;display:none;place-items:center}
+.pdftile.on i{display:grid}
+.pdfopt{display:flex;align-items:center;gap:8px;font-size:13.5px;margin-top:12px;cursor:pointer}
+#selBar{position:fixed;z-index:21;display:none;padding:4px;gap:2px}
+#selBar.show{display:flex}
+.pagejump{display:flex;align-items:center;gap:8px;padding:4px 8px 8px;font-size:13.5px}
+.pagejump input{width:64px;padding:6px 8px}
+#dropZone{position:fixed;inset:0;z-index:80;background:rgba(43,89,195,.10);backdrop-filter:blur(1px);display:none;place-items:center;pointer-events:none}
+#dropZone.show{display:grid}
+#dropZone > div{border:2.5px dashed var(--accent);border-radius:20px;padding:34px 46px;background:var(--panel);display:flex;flex-direction:column;align-items:center;gap:6px;box-shadow:var(--shadow);color:var(--text)}
+#dropZone svg{width:44px;height:44px;color:var(--accent);margin-bottom:4px}
+#dropZone b{font-size:18px}
+#dropZone span{font-size:13.5px;color:var(--muted)}
+#boardChip{position:relative}
+#boardChip.live::after{content:'';position:absolute;top:5px;right:5px;width:8px;height:8px;border-radius:50%;background:#2fb344;box-shadow:0 0 0 2px var(--panel)}
+#selTrash{position:fixed;z-index:22;width:28px;height:28px;border-radius:50%;background:var(--panel);border:1px solid var(--line);box-shadow:var(--shadow);color:#e03131;display:none;place-items:center}
+#selTrash.show{display:grid}
+#selTrash svg{width:16px;height:16px}
+#selTrash:hover{background:#e03131;color:#fff;border-color:#e03131}
+/* modal */
+#modalWrap{position:fixed;inset:0;background:rgba(15,20,30,.35);display:none;place-items:center;z-index:60}
+#modalWrap.open{display:grid}
+#modal{width:min(420px,calc(100vw - 32px));padding:18px}
+#modal h3{margin:0 0 6px;font-size:16px}
+#modal p{margin:0 0 16px;color:var(--muted);font-size:14px;line-height:1.5}
+#modal .row{justify-content:flex-end}
+.keys{display:grid;grid-template-columns:1fr auto;gap:6px 18px;font-size:13.5px;margin-bottom:14px;max-height:60vh;overflow:auto}
+.keys kbd{font-family:inherit;background:var(--panel-2);border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:1px 7px;font-size:12px;font-weight:600}
+
+#toast{position:fixed;left:50%;top:var(--tb,66px);transform:translateX(-50%) translateY(-8px);background:#1d2330;color:#fff;padding:9px 14px;border-radius:10px;font-size:13.5px;z-index:70;opacity:0;pointer-events:none;transition:all .18s;max-width:calc(100vw - 40px)}
+#toast.show{opacity:1;transform:translateX(-50%)}
+#syncing{position:fixed;right:12px;top:62px;font-size:12px;color:var(--muted);z-index:18;display:none}
+
+.stu-row{display:flex;align-items:center;gap:4px;border-radius:9px;padding:2px 4px 2px 2px}
+.stu-row.on{background:var(--accent-soft)}
+.stu-main{flex:1;display:flex;align-items:center;gap:9px;padding:8px;border-radius:8px;text-align:left;font-size:14px;min-width:0}
+.stu-main:hover{background:var(--panel-2)}
+.stu-row.on .stu-main:hover{background:transparent}
+.stu-main .k{margin-left:auto;color:var(--accent);font-size:12px;font-weight:600}
+.stu-txt{display:flex;flex-direction:column;min-width:0;gap:1px}
+.stu-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.stu-url{font-size:11.5px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.stu-main .k.go{color:var(--muted);font-weight:500}
+.stu-dot{width:8px;height:8px;border-radius:50%;background:var(--line);flex:none}
+.stu-dot.live{background:#2fb344}
+.stu-dot.wait{background:#f59f00}
+#notice{position:fixed;left:50%;top:var(--tb,64px);transform:translateX(-50%);z-index:30;display:none;align-items:center;gap:12px;padding:8px 8px 8px 16px;font-size:14px;font-weight:500;max-width:calc(100vw - 20px)}
+#notice.show{display:flex}
+#boardChipText{max-width:140px;overflow:hidden;text-overflow:ellipsis}
+.peer-row{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:8px;font-size:13.5px}
+.peer-row .pdot{width:10px;height:10px;border-radius:50%}
+.peer-row .mini{margin-left:auto}
+
+@media (max-width:520px){
+  .sw{width:24px;height:24px}
+  .sw i{width:17px;height:17px}
+  #swatches{grid-template-columns:repeat(8,24px)!important}
+  .sz{width:26px}
+  #stylebar{padding:5px 6px}
+}
+@media (max-width:720px){
+  #topbar{flex-wrap:wrap;row-gap:6px;top:8px;left:8px;right:8px}
+  #topbar .spacer{display:none}
+  .group{height:40px}
+  #zoombar{display:none}
+  .brand-text,.hide-sm{display:none}
+  .editor{left:10px!important;right:10px;width:auto;top:auto!important;bottom:70px}
+}
+</style>
+</head>
+<body data-chrome="light">
+
+<svg id="board" class="tool-pen" xmlns="http://www.w3.org/2000/svg">
+  <defs id="patterns"></defs>
+  <g id="world">
+    <rect id="deskRect" x="-60000" y="-60000" width="120000" height="120000"/>
+    <rect id="sheetShadow" x="0" y="0" width="1600" height="1000" rx="3"/>
+    <rect id="bgRect" x="0" y="0" width="1600" height="1000"/>
+    <rect id="patRect" x="0" y="0" width="1600" height="1000" fill="url(#pat)"/>
+    <clipPath id="sheetClip"><rect id="sheetClipRect" x="0" y="0" width="1600" height="1000"/></clipPath>
+    <g id="items" clip-path="url(#sheetClip)"></g>
+    <mask id="eraseMask" maskUnits="userSpaceOnUse" x="-60000" y="-60000" width="120000" height="120000"><rect x="-60000" y="-60000" width="120000" height="120000" fill="white"/><path id="eraseMaskPath" fill="none" stroke="black" stroke-linecap="round" stroke-linejoin="round"/></mask>
+    <g id="temp"></g>
+    <g id="selLayer"></g>
+  </g>
+  <g id="overlay"></g>
+</svg>
+
+<header id="topbar">
+  <div class="panel group">
+    <div class="brand"><div class="brand-mark">∑</div><span class="brand-text">Math Board</span></div>
+    <button class="ibtn" id="menuBtn" data-tip="Board menu">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+    </button>
+  </div>
+  <div class="panel group">
+    <button class="ibtn" id="undoBtn" data-tip="Undo" data-key="Ctrl Z"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+    <button class="ibtn" id="redoBtn" data-tip="Redo" data-key="Ctrl Shift Z"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+  </div>
+  <div class="panel group">
+    <button class="ibtn" id="prevPage" data-tip="Previous page" data-key="PgUp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <button class="ibtn pagelabel" id="pageLabel" data-tip="Click to jump to a page">1 / 1</button>
+    <button class="ibtn" id="nextPage" data-tip="Next page" data-key="PgDn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+    <button class="ibtn" id="addPage" data-tip="New page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+  </div>
+  <div class="panel group">
+    <button class="ibtn" id="boardChip" data-tip="Students & their links"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 20a6.5 6.5 0 0 0-3-5.5"/></svg><span id="boardChipText">My board</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:14px;height:14px;opacity:.6"><path d="M6 9l6 6 6-6"/></svg></button>
+  </div>
+  <div class="spacer"></div>
+</header>
+
+<div id="shapeFly" class="panel"></div>
+<div id="dock">
+<nav id="toolbar" class="panel">
+  <button class="tbtn" data-tool="select" data-tip="Select & move" data-key="V"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M5 3.5l13 6.5-5.6 1.8L10.6 17.5z"/><path d="M12.5 12l5 5" stroke-linecap="round"/></svg></button>
+  <button class="tbtn" data-tool="hand" data-tip="Pan" data-key="Space"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12.5V5.5a1.5 1.5 0 0 1 3 0V11"/><path d="M11 11V4a1.5 1.5 0 0 1 3 0v7"/><path d="M14 11V5.5a1.5 1.5 0 0 1 3 0V14a6.5 6.5 0 0 1-6.5 6.5h-.7a6 6 0 0 1-4.9-2.6L3.3 14.6a1.5 1.5 0 0 1 2.4-1.8L8 15.5"/></svg></button>
+  <div class="tsep"></div>
+  <button class="tbtn on" data-tool="pen" data-tip="Pen" data-key="P"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4.5L16 4.5a2.1 2.1 0 0 1 3 3L8 18.5z"/><path d="M14 6.5l3 3"/></svg></button>
+  <button class="tbtn" data-tool="hl" data-tip="Highlighter" data-key="H"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15l-4.5 4.5H10l1.5-1.5"/><path d="M8.5 14.5l8-10 4 3.2-8 10-4 .3z"/></svg></button>
+  <button class="tbtn" data-tool="eraser" data-tip="Eraser (size: 1–4)" data-key="E"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 20h12"/><path d="M4.6 15.4l9.8-9.8a2 2 0 0 1 2.8 0l2.2 2.2a2 2 0 0 1 0 2.8L11 19H8.2z"/><path d="M9 11l5 5"/></svg></button>
+  <div class="tsep"></div>
+  <button class="tbtn" data-tool="shape" id="shapeBtn" data-tip="Shapes" data-key="L A R O"><span id="shapeIcon"></span><span class="more"></span></button>
+  <button class="tbtn" data-tool="text" data-tip="Text" data-key="T"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7V5h14v2M12 5v14M9 19h6"/></svg></button>
+</nav>
+<div id="stylebar" class="panel">
+  <div id="swatches" style="display:flex;gap:2px"></div>
+  <div class="sep"></div>
+  <div id="sizes" style="display:flex;gap:2px"></div>
+</div>
+</div>
+
+<div id="zoombar" class="panel">
+  <button class="ibtn" id="zoomOut" data-tip="Zoom out" data-key="−"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+  <button class="ibtn" id="zoomLabel" data-tip="Reset to 100%">100%</button>
+  <button class="ibtn" id="zoomIn" data-tip="Zoom in" data-key="+"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+  <button class="ibtn" id="zoomFit" data-tip="Fit page" data-key="Shift 1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+</div>
+
+<!-- Board menu -->
+<div class="pop panel" id="menuPop">
+  <div class="menu-label">Background</div>
+  <div class="chips" id="bgChips"></div>
+  <div class="menu-label">Board color</div>
+  <div class="chips" id="themeChips"></div>
+  <div class="menu-sep"></div>
+  <button class="menu-item" data-act="importpdf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 18v-6M9 15l3-3 3 3"/></svg>Add PDF worksheet…<span class="k">or drag it in</span></button>
+  <button class="menu-item" data-act="exportpdf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Download board as PDF</button>
+  <div class="menu-sep"></div>
+  <button class="menu-item" data-act="newboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>New board (start fresh)</button>
+  <div class="menu-sep"></div>
+  <button class="menu-item" data-act="help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/></svg>Keyboard shortcuts<span class="k">?</span></button>
+</div>
+
+<!-- Pages menu -->
+<div class="pop panel" id="pagePop" style="width:270px">
+  <div class="pagejump">Go to page <input class="field" id="pageJump" type="number" min="1"> <span id="pageJumpOf"></span></div>
+  <div id="pageList" style="max-height:min(50vh,360px);overflow:auto"></div>
+  <div class="menu-sep"></div>
+  <div class="menu-label">Page shape</div>
+  <div class="chips" id="sheetChips"></div>
+  <div class="menu-sep"></div>
+  <button class="menu-item" data-act="dupPage">Duplicate this page</button>
+  <button class="menu-item danger" data-act="delPage">Delete this page</button>
+</div>
+
+<!-- Timer -->
+<div class="pop panel" id="timerPop" style="width:250px">
+  <div class="menu-label">Countdown</div>
+  <div class="chips" id="timerPresets"></div>
+  <div class="row" style="padding:0 6px 4px"><input class="field" id="timerCustom" type="number" min="0.1" step="0.5" placeholder="Minutes" style="padding:6px 8px"><button class="mini" id="timerCustomGo">Start</button></div>
+  <div class="menu-sep"></div>
+  <button class="menu-item" id="timerStopwatch">Stopwatch (count up)</button>
+  <button class="menu-item" id="timerPause">Pause</button>
+  <button class="menu-item" id="timerReset">Reset</button>
+</div>
+
+<!-- Live -->
+<div class="pop panel" id="livePop" style="width:320px">
+  <div class="menu-label">Your name</div>
+  <div style="padding:0 6px 6px"><input class="field" id="nameInput" maxlength="24" placeholder="Your name"></div>
+  <div id="liveBody"></div>
+</div>
+
+<div class="pop panel" id="studentsPop" style="width:360px"><div id="studentsBody"></div></div>
+<div id="notice" class="panel"></div>
+
+<!-- Math editor -->
+<div class="editor panel" id="mathEditor">
+  <h3>Equation <button class="ibtn x" data-close>✕</button></h3>
+  <textarea class="field" id="mathInput" rows="2" placeholder="e.g. x = \frac{-b \pm \sqrt{b^2-4ac}}{2a}" spellcheck="false"></textarea>
+  <div class="preview" id="mathPreview"></div>
+  <div class="qgrid" id="mathQuick"></div>
+  <div class="row"><button class="btn danger" id="mathDelete" style="display:none">Delete</button><span class="spacer"></span><button class="btn" data-close>Cancel</button><button class="btn primary" id="mathOk">Insert</button></div>
+</div>
+
+<!-- Graph editor -->
+<div class="editor panel" id="graphEditor">
+  <h3>Graph <button class="ibtn x" data-close>✕</button></h3>
+  <div id="fnRows"></div>
+  <button class="mini" id="addFn">+ Add function or point</button>
+  <div class="hint">Try <b>y = 2x + 1</b>, <b>x^2 - 4</b>, <b>sqrt(x)</b>, <b>|x - 2|</b>, <b>sin(x)</b>, a vertical line <b>x = 3</b>, or a point <b>(2, 5)</b>.</div>
+  <div class="range">x from <input class="field" id="gxmin" type="number"> to <input class="field" id="gxmax" type="number">
+    y from <input class="field" id="gymin" type="number"> to <input class="field" id="gymax" type="number"></div>
+  <div class="row" style="flex-wrap:wrap;gap:4px;margin-top:8px">
+    <button class="mini" data-range="std">−10 to 10</button>
+    <button class="mini" data-range="q1">1st quadrant</button>
+    <button class="mini" data-range="trig">Trig</button>
+    <button class="mini" data-range="square">Square up</button>
+    <label class="mini" style="display:flex;align-items:center;gap:5px;cursor:pointer"><input type="checkbox" id="gGrid" style="margin:0">Grid</label>
+  </div>
+  <div class="row" style="margin-top:12px"><button class="btn danger" id="graphDelete">Delete</button><span class="spacer"></span><button class="btn primary" data-close>Done</button></div>
+</div>
+
+<!-- Number line editor -->
+<div class="editor panel" id="numEditor">
+  <h3>Number line <button class="ibtn x" data-close>✕</button></h3>
+  <div class="range">from <input class="field" id="nmin" type="number"> to <input class="field" id="nmax" type="number">
+    step <input class="field" id="nstep" type="number" step="any"> <span></span></div>
+  <div style="margin-top:10px;font-size:13px;color:var(--muted)">Mark points (comma separated; prefix with <b>o</b> for an open circle)</div>
+  <input class="field" id="nmarks" placeholder="e.g. -2, o3.5" style="margin-top:4px">
+  <div class="row" style="margin-top:12px"><button class="btn danger" id="numDelete">Delete</button><span class="spacer"></span><button class="btn primary" data-close>Done</button></div>
+</div>
+
+<textarea id="textEditor" spellcheck="false"></textarea>
+
+<div id="modalWrap"><div id="modal" class="panel"></div></div>
+<div id="selBar" class="panel"><button class="ibtn" id="eraseLockBtn"></button></div>
+<div id="dropZone"><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 18v-6M9 15l3 3 3-3"/></svg><b>Drop your PDF here</b><span>Each page you pick goes on its own board page</span></div></div>
+<div class="pop panel" id="gridPop"><div class="cgrid" id="cgrid"></div><div class="crecent" id="crecent"></div></div>
+<button id="selTrash" title="Delete" aria-label="Delete selection"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
+<div id="toast"></div>
+<div id="syncing">Syncing board…</div>
+<div class="tip" id="tip"></div>
+<input type="file" id="imgFile" accept="application/pdf,.pdf" hidden>
+<input type="file" id="boardFile" accept=".json,application/json" hidden>
+
+<script>
+'use strict';
+/* =========================================================
+   Basics
+   ========================================================= */
+const NS = 'http://www.w3.org/2000/svg';
+const $ = s => document.querySelector(s);
+const $$ = s => [...document.querySelectorAll(s)];
+function el(tag, attrs, parent) {
+  const e = document.createElementNS(NS, tag);
+  if (attrs) for (const k in attrs) if (attrs[k] !== undefined && attrs[k] !== null) e.setAttribute(k, attrs[k]);
+  if (parent) parent.appendChild(e);
+  return e;
+}
+const rd = v => Math.round(v * 10) / 10;
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const clone = o => JSON.parse(JSON.stringify(o));
+const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+const ACTOR = Math.random().toString(36).slice(2, 10);
+const enc = new TextEncoder();
+const bytes = s => enc.encode(s).length;
+
+const store = {
+  get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch { return false; } }
+};
+
+const QS = (() => { try { return new URLSearchParams(location.search); } catch { return new URLSearchParams(); } })();
+const LINK_CODE = (() => {
+  const h = decodeURIComponent((location.hash || '').replace(/^#/, '')).toLowerCase();
+  if (h.startsWith('pair-')) return null;
+  let c = h.includes('-') ? h.slice(h.lastIndexOf('-') + 1) : h;
+  if (!/^[a-z0-9]{6,16}$/.test(c)) c = QS.get('s') || '';
+  return /^[a-z0-9]{6,16}$/.test(c) ? c : null;
+})();
+const LINK_IS_MINE = !!LINK_CODE && ((store.get('mb.students', []) || []).some(x => x && x.key === LINK_CODE) || LINK_CODE === store.get('mb.adhoc', null));
+const JOIN_CODE = LINK_CODE && !LINK_IS_MINE ? LINK_CODE : null;
+const JOIN_KEY = JOIN_CODE;
+const PAIR_CODE = (() => { const h = (location.hash || '').replace(/^#/, '').toLowerCase(); const m = h.match(/^pair-([a-z0-9]{6,12})$/); return m ? m[1] : null; })();
+let BOARD_KEY = JOIN_CODE ? 'mb.board.join.' + JOIN_CODE : 'mb.board';
+const idb = (() => {
+  let dbp = null;
+  const open = () => dbp || (dbp = new Promise((res, rej) => { try { const r = indexedDB.open('mathboard', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); } catch (e) { rej(e); } }));
+  const tx = (mode, fn) => open().then(db => new Promise((res, rej) => { const t = db.transaction('kv', mode), q = fn(t.objectStore('kv')); t.oncomplete = () => res(q && q.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }));
+  return { get: k => tx('readonly', st => st.get(k)).catch(() => undefined), set: (k, v) => tx('readwrite', st => st.put(v, k)).then(() => true).catch(() => false), del: k => tx('readwrite', st => st.delete(k)).catch(() => {}) };
+})();
+const board = $('#board'), world = $('#world'), itemsG = $('#items'), tempG = $('#temp'), selG = $('#selLayer'), overlayG = $('#overlay');
+
+/* =========================================================
+   Colors, themes, backgrounds
+   ========================================================= */
+const COLORS = {
+  ink:     ['#1e2430', '#f1f1ec'],
+  gray:    ['#868e96', '#adb5bd'],
+  brown:   ['#8d5524', '#d4a373'],
+  red:     ['#e03131', '#ff8787'],
+  pink:    ['#e64980', '#f783ac'],
+  orange:  ['#e8590c', '#ffa94d'],
+  yellow:  ['#f0b400', '#ffe066'],
+  lime:    ['#74b816', '#c0eb75'],
+  green:   ['#2f9e44', '#8ce99a'],
+  teal:    ['#0c8599', '#66d9e8'],
+  sky:     ['#1c7ed6', '#a5d8ff'],
+  blue:    ['#1c4fd0', '#74c0fc'],
+  purple:  ['#7048e8', '#c3a6ff'],
+  magenta: ['#ae3ec9', '#e599f7'],
+  white:   ['#ffffff', '#ffffff'],
+};
+const HL_COLORS = ['yellow', 'lime', 'green', 'teal', 'sky', 'blue', 'purple', 'magenta', 'pink', 'red', 'orange', 'gray'];
+const PEN_COLORS = ['ink', 'gray', 'brown', 'red', 'pink', 'orange', 'yellow', 'lime', 'green', 'teal', 'sky', 'blue', 'purple', 'magenta', 'white'];
+const isHex = c => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
+const THEMES = {
+  white: { name: 'Whiteboard', bg: '#ffffff', grid: '#e6eaf0', major: '#cdd5e0', dark: false, desk: '#ffffff' },
+  paper: { name: 'Paper', bg: '#fbf8f1', grid: '#ebe4d4', major: '#d9cfba', dark: false, desk: '#fbf8f1' },
+  chalk: { name: 'Chalkboard', bg: '#22392f', grid: 'rgba(255,255,255,.07)', major: 'rgba(255,255,255,.15)', dark: true, desk: '#22392f' },
+  dark:  { name: 'Dark', bg: '#15181f', grid: '#222733', major: '#2e3545', dark: true, desk: '#15181f' },
+};
+const BGS = { blank: 'Blank', grid: 'Grid', graph: 'Graph paper', dots: 'Dots', lined: 'Lined' };
+const PEER_COLORS = ['#e8590c', '#7048e8', '#0ca678', '#d6336c', '#1c7ed6', '#f59f00'];
+
+const S = {
+  tool: 'pen', shape: 'line', esize: 4, color: 'ink', hl: 'yellow', size: 1,
+  theme: store.get('mb.theme', 'chalk'), bg: store.get('mb.bg', 'grid'),
+};
+if (!THEMES[S.theme]) S.theme = 'chalk';
+if (!BGS[S.bg]) S.bg = 'grid';
+const T = () => THEMES[S.theme];
+const color = c => isHex(c) ? c : (COLORS[c] || COLORS.ink)[T().dark ? 1 : 0];
+
+const PEN_W = [1.8, 3.2, 6, 11, 18];
+const HL_W = [12, 20, 30, 44, 64];
+const TEXT_SZ = [18, 26, 38, 56, 80];
+const SHAPE_W = [1.8, 3, 5, 8, 13];
+
+function buildPatterns() {
+  const d = $('#patterns'); d.innerHTML = '';
+  const t = T();
+  let p;
+  if (S.bg === 'grid') {
+    p = el('pattern', { id: 'pat', width: 40, height: 40, patternUnits: 'userSpaceOnUse' }, d);
+    el('path', { d: 'M40 0H0V40', fill: 'none', stroke: t.major, 'stroke-width': 1 }, p);
+  } else if (S.bg === 'graph') {
+    p = el('pattern', { id: 'pat', width: 50, height: 50, patternUnits: 'userSpaceOnUse' }, d);
+    el('path', { d: 'M10 0V50M20 0V50M30 0V50M40 0V50M0 10H50M0 20H50M0 30H50M0 40H50', fill: 'none', stroke: t.grid, 'stroke-width': .8 }, p);
+    el('path', { d: 'M50 0H0V50', fill: 'none', stroke: t.major, 'stroke-width': 1.3 }, p);
+  } else if (S.bg === 'dots') {
+    p = el('pattern', { id: 'pat', width: 30, height: 30, patternUnits: 'userSpaceOnUse' }, d);
+    el('circle', { cx: 15, cy: 15, r: 1.6, fill: t.major }, p);
+  } else if (S.bg === 'lined') {
+    p = el('pattern', { id: 'pat', width: 40, height: 40, patternUnits: 'userSpaceOnUse' }, d);
+    el('path', { d: 'M0 39.5H40', stroke: t.major, 'stroke-width': 1 }, p);
+  } else {
+    p = el('pattern', { id: 'pat', width: 10, height: 10, patternUnits: 'userSpaceOnUse' }, d);
+  }
+  $('#bgRect').setAttribute('fill', t.bg); $('#deskRect').setAttribute('fill', t.desk); $('#sheetShadow').setAttribute('fill', 'none'); $('#bgRect').setAttribute('stroke', t.major); $('#bgRect').setAttribute('stroke-width', 1.2); $('#bgRect').setAttribute('vector-effect', 'non-scaling-stroke');
+  document.body.dataset.chrome = t.dark ? 'dark' : 'light';
+  document.body.style.background = t.desk;
+}
+
+/* =========================================================
+   Records (shared state)
+   item:  {id,k:'item',v,a,del,page,z,t,...}
+   page:  {id,k:'page',v,a,del,z}
+   Newest (v, a) wins. Every change is a whole-record "put".
+   ========================================================= */
+const recs = new Map();
+let clockV = 0, lastZ = 0;
+let curPage = 'p0';
+const views = {};
+const newer = (x, y) => x.v > y.v || (x.v === y.v && x.a > y.a);
+const nextZ = () => (lastZ = Math.max(Date.now(), lastZ + 1));
+
+function applyRec(r) {
+  const old = recs.get(r.id);
+  if (old && !newer(r, old)) return false;
+  clockV = Math.max(clockV, r.v);
+  if (r.z && r.z > lastZ && r.z < Date.now() + 864e5) lastZ = r.z;
+  recs.set(r.id, r);
+  if (r.k === 'page') { pagesDirty = true; if (r.id === curPage) { applySheet(); sheetDirty = true; } }
+  else if (r.page === curPage || (old && old.page === curPage)) renderItem(r);
+  return true;
+}
+let pagesDirty = false, sheetDirty = false;
+
+function putRecords(list, broadcast = true) {
+  for (const r of list) { r.v = ++clockV; r.a = ACTOR; applyRec(r); }
+  if (broadcast) Live.send(list);
+  afterChange();
+}
+
+const hist = { undo: [], redo: [] };
+function commit(list) {
+  if (!list.length) return;
+  const before = list.map(r => recs.has(r.id) ? clone(recs.get(r.id)) : null);
+  const after = list.map(r => clone(r));
+  putRecords(list);
+  hist.undo.push({ before, after });
+  if (hist.undo.length > 300) hist.undo.shift();
+  hist.redo = [];
+  updateUndoUI();
+}
+function undo() {
+  const e = hist.undo.pop(); if (!e) return;
+  const restore = e.before.map((b, i) => b ? clone(b) : Object.assign(clone(e.after[i]), { del: 1 }));
+  putRecords(restore);
+  hist.redo.push(e); clearSelection(); updateUndoUI();
+}
+function redo() {
+  const e = hist.redo.pop(); if (!e) return;
+  putRecords(e.after.map(clone));
+  hist.undo.push(e); clearSelection(); updateUndoUI();
+}
+function updateUndoUI() {
+  $('#undoBtn').disabled = !hist.undo.length;
+  $('#redoBtn').disabled = !hist.redo.length;
+}
+
+function pages() {
+  return [...recs.values()].filter(r => r.k === 'page' && !r.del).sort((a, b) => a.z - b.z || (a.id < b.id ? -1 : 1));
+}
+function pageItems(pid = curPage) {
+  return [...recs.values()].filter(r => r.k === 'item' && !r.del && r.page === pid).sort((a, b) => a.z - b.z);
+}
+function ensurePage() {
+  if (!pages().length) {
+    const ex = recs.get('p0');
+    const sc = screenSheet();
+    putRecords([{ id: 'p0', k: 'page', del: 0, z: 1, v: ex ? ex.v : 0, w: sc.w, h: sc.h }], !!ex);
+  }
+}
+
+function afterChange() {
+  if (sheetDirty) { sheetDirty = false; requestAnimationFrame(() => applyView(true)); }
+  if (pagesDirty) {
+    pagesDirty = false;
+    const ps = pages();
+    if (!ps.find(p => p.id === curPage)) { if (ps.length) goPage(ps[ps.length - 1].id, true); else ensurePage(); }
+    updatePageUI();
+  }
+  renderSelection();
+  scheduleSave();
+}
+
+/* =========================================================
+   Rendering
+   ========================================================= */
+const elems = new Map();
+const bbCache = new Map();
+let getStroke = null, mathReady = false;
+
+function renderPage() {
+  itemsG.innerHTML = ''; elems.clear(); bbCache.clear();
+  for (const r of pageItems()) { const g = buildEl(r); g.dataset.id = r.id; g.dataset.z = r.z; itemsG.appendChild(g); elems.set(r.id, g); }
+  renderSelection();
+}
+function renderItem(r) {
+  const old = elems.get(r.id);
+  bbCache.delete(r.id);
+  if (r.del || r.page !== curPage) { if (old) { old.remove(); elems.delete(r.id); } selection.delete(r.id); return; }
+  const g = buildEl(r); g.dataset.id = r.id; g.dataset.z = r.z;
+  if (old && +old.dataset.z === r.z) old.replaceWith(g);
+  else {
+    if (old) old.remove();
+    let ref = null;
+    for (let c = itemsG.lastElementChild; c; c = c.previousElementSibling) { if (+c.dataset.z <= r.z) break; ref = c; }
+    itemsG.insertBefore(g, ref);
+  }
+  elems.set(r.id, g);
+}
+function bbox(id) {
+  if (bbCache.has(id)) return bbCache.get(id);
+  const g = elems.get(id); if (!g) return null;
+  const r = recs.get(id);
+  if (r && (r.t === 'graph' || r.t === 'image') && (!graphEdit || graphEdit.r.id !== id)) { const b = { x: r.x, y: r.y, w: r.w, h: r.h }; bbCache.set(id, b); return b; }
+  if (graphEdit && graphEdit.r.id === id) return { x: graphEdit.r.x, y: graphEdit.r.y, w: graphEdit.r.w, h: graphEdit.r.h };
+  let b; try { const bb = g.getBBox(); b = { x: bb.x, y: bb.y, w: bb.width, h: bb.height }; } catch { b = { x: 0, y: 0, w: 0, h: 0 }; }
+  bbCache.set(id, b); return b;
+}
+
+function smoothPath(pts) {
+  if (!pts.length) return '';
+  const f = n => n.toFixed(1);
+  if (pts.length === 1) return `M${f(pts[0][0])} ${f(pts[0][1])}l0.01 0`;
+  if (pts.length === 2) return `M${f(pts[0][0])} ${f(pts[0][1])}L${f(pts[1][0])} ${f(pts[1][1])}`;
+  let d = `M${f(pts[0][0])} ${f(pts[0][1])}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const mx = (pts[i][0] + pts[i + 1][0]) / 2, my = (pts[i][1] + pts[i + 1][1]) / 2;
+    d += `Q${f(pts[i][0])} ${f(pts[i][1])} ${f(mx)} ${f(my)}`;
+  }
+  const l = pts[pts.length - 1];
+  return d + `L${f(l[0])} ${f(l[1])}`;
+}
+function outlinePath(pts) {
+  const n = pts.length, a = (x, y) => ((x + y) / 2).toFixed(2);
+  let p0 = pts[0], p1 = pts[1];
+  let d = `M${p0[0].toFixed(2)},${p0[1].toFixed(2)} Q${p1[0].toFixed(2)},${p1[1].toFixed(2)} ${a(p1[0], pts[2][0])},${a(p1[1], pts[2][1])} T`;
+  for (let i = 2; i < n - 1; i++) d += `${a(pts[i][0], pts[i + 1][0])},${a(pts[i][1], pts[i + 1][1])} `;
+  return d + 'Z';
+}
+function strokeEl(r) {
+  const col = color(r.c);
+  if (r.hl) {
+    return el('path', { d: smoothPath(r.pts), fill: 'none', stroke: col, 'stroke-width': r.w, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: T().dark ? .35 : .42, style: T().dark ? null : 'mix-blend-mode:multiply' });
+  }
+  return el('path', { d: smoothPath(r.pts), fill: 'none', stroke: col, 'stroke-width': r.w * 1.15, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' });
+}
+function arrowHead(g, x1, y1, x2, y2, w, col) {
+  const ang = Math.atan2(y2 - y1, x2 - x1), len = Math.max(11, w * 3.6), sp = .42;
+  const p = (a) => `${(x2 - len * Math.cos(a)).toFixed(1)},${(y2 - len * Math.sin(a)).toFixed(1)}`;
+  el('polygon', { points: `${x2},${y2} ${p(ang - sp)} ${p(ang + sp)}`, fill: col, stroke: col, 'stroke-width': w * .6, 'stroke-linejoin': 'round' }, g);
+}
+function norm(r) { return { x: Math.min(r.x1, r.x2), y: Math.min(r.y1, r.y2), w: Math.abs(r.x2 - r.x1), h: Math.abs(r.y2 - r.y1) }; }
+function shapeEl(r) {
+  const col = color(r.c), sw = r.w;
+  const st = { fill: 'none', stroke: col, 'stroke-width': sw, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' };
+  const g = el('g');
+  if (r.t === 'line') {
+    let { x1, y1, x2, y2 } = r;
+    if (r.arrow) { const L = Math.hypot(x2 - x1, y2 - y1) || 1, cut = Math.min(L * .5, Math.max(11, sw * 3.6) * .7); x2 -= (x2 - x1) / L * cut; y2 -= (y2 - y1) / L * cut; }
+    el('line', Object.assign({ x1, y1, x2, y2 }, st), g);
+    if (r.arrow) arrowHead(g, r.x1, r.y1, r.x2, r.y2, sw, col);
+  } else if (r.t === 'rect') {
+    const n = norm(r); el('rect', Object.assign({ x: n.x, y: n.y, width: n.w, height: n.h, rx: 2 }, st), g);
+  } else if (r.t === 'ellipse') {
+    const n = norm(r); el('ellipse', Object.assign({ cx: n.x + n.w / 2, cy: n.y + n.h / 2, rx: n.w / 2, ry: n.h / 2 }, st), g);
+  } else if (r.t === 'tri') {
+    const n = norm(r);
+    el('polygon', Object.assign({ points: `${n.x + n.w / 2},${n.y} ${n.x + n.w},${n.y + n.h} ${n.x},${n.y + n.h}` }, st), g);
+  } else if (r.t === 'rtri') {
+    const pts = `${r.x1},${r.y1} ${r.x1},${r.y2} ${r.x2},${r.y2}`;
+    el('polygon', Object.assign({ points: pts }, st), g);
+    const s = Math.min(14, Math.abs(r.x2 - r.x1) / 3, Math.abs(r.y2 - r.y1) / 3);
+    const dx = Math.sign(r.x2 - r.x1) * s, dy = Math.sign(r.y1 - r.y2) * s;
+    el('path', Object.assign({}, st, { d: `M${r.x1} ${r.y2 + dy}h${dx}v${-dy}`, 'stroke-width': Math.max(1, sw * .6) }), g);
+  } else if (r.t === 'axes') {
+    const n = norm(r), cx = n.x + n.w / 2, cy = n.y + n.h / 2;
+    for (const [a, b, c, d] of [[n.x, cy, n.x + n.w, cy], [cx, n.y + n.h, cx, n.y]]) {
+      el('line', Object.assign({ x1: a, y1: b, x2: c, y2: d }, st), g); arrowHead(g, a, b, c, d, sw, col);
+    }
+    el('text', { x: n.x + n.w - 4, y: cy + 18, 'font-size': 15, fill: col, 'text-anchor': 'end', 'font-style': 'italic', 'font-family': 'DM Sans, sans-serif' }, g).textContent = 'x';
+    el('text', { x: cx + 9, y: n.y + 14, 'font-size': 15, fill: col, 'font-style': 'italic', 'font-family': 'DM Sans, sans-serif' }, g).textContent = 'y';
+  }
+  return g;
+}
+function textEl(r) {
+  const t = el('text', { x: r.x, y: r.y, 'font-size': r.size, fill: color(r.c), 'font-family': 'DM Sans, sans-serif', 'xml:space': 'preserve' });
+  String(r.text).split('\n').forEach((line, i) => {
+    const ts = el('tspan', { x: r.x, dy: i === 0 ? r.size * .92 : r.size * 1.25 }, t);
+    ts.textContent = line || ' ';
+  });
+  return t;
+}
+function texToSvg(tex) {
+  if (!mathReady || !window.MathJax || !MathJax.tex2svg) return null;
+  try {
+    const node = MathJax.tex2svg(tex, { display: true }).querySelector('svg');
+    if (!node) return null;
+    node.querySelectorAll('a').forEach(a => a.replaceWith(...a.childNodes));
+    const err = node.querySelector('[data-mjx-error]');
+    return { node, err: err ? err.getAttribute('data-mjx-error') : null };
+  } catch (e) { return null; }
+}
+function mathEl(r) {
+  const g = el('g');
+  const res = texToSvg(r.tex);
+  const col = color(r.c);
+  if (!res) {
+    const t = el('text', { x: r.x, y: r.y + r.size, 'font-size': r.size * .8, fill: col, 'font-family': 'ui-monospace, monospace' }, g);
+    t.textContent = r.tex; return g;
+  }
+  const n = res.node, ex = r.size * .46;
+  const w = parseFloat(n.getAttribute('width')) * ex, h = parseFloat(n.getAttribute('height')) * ex;
+  n.setAttribute('x', r.x); n.setAttribute('y', r.y); n.setAttribute('width', w); n.setAttribute('height', h);
+  n.setAttribute('style', `color:${col};overflow:visible`);
+  n.removeAttribute('role'); n.removeAttribute('focusable');
+  el('rect', { x: r.x, y: r.y, width: w, height: h, fill: 'transparent' }, g);
+  g.appendChild(n);
+  return g;
+}
+
+/* ---------- function parsing for graphs ---------- */
+const fnCache = new Map();
+function prepExpr(s) {
+  return s.replace(/π/g, 'pi').replace(/√\s*\(/g, 'sqrt(').replace(/√\s*([0-9a-z.]+)/gi, 'sqrt($1)')
+    .replace(/θ/g, 'x').replace(/·|×/g, '*').replace(/÷/g, '/').replace(/−/g, '-')
+    .replace(/\bln\s*\(/g, 'log(').replace(/\blog\s*\(/g, 'log10(')
+    .replace(/\|([^|]+)\|/g, 'abs($1)');
+}
+function parseFn(src) {
+  const key = src;
+  if (fnCache.has(key)) return fnCache.get(key);
+  let res = null;
+  try {
+    let s = src.trim();
+    if (!s) return null;
+    if (!window.math) return { kind: 'wait' };
+    s = prepExpr(s);
+    const pm = s.match(/^\(\s*([^,]+?)\s*,\s*([^)]+?)\s*\)$/);
+    const vm = s.match(/^x\s*=\s*(.+)$/);
+    if (pm) {
+      const x = math.evaluate(pm[1]), y = math.evaluate(pm[2]);
+      if (isFinite(x) && isFinite(y)) res = { kind: 'point', x: +x, y: +y, label: `(${pm[1].trim()}, ${pm[2].trim()})` };
+    } else if (vm && !/x/.test(vm[1])) {
+      const x = math.evaluate(vm[1]); if (isFinite(x)) res = { kind: 'vline', x: +x };
+    } else {
+      s = s.replace(/^\s*(y|[a-zA-Z]\s*\(\s*x\s*\))\s*=\s*/, '');
+      const c = math.compile(s);
+      let ok = false;
+      for (const t of [0.37, 1.3, -2.1, 4.7]) { const v = c.evaluate({ x: t }); if (typeof v === 'number' || (v && typeof v.re === 'number')) { ok = true; break; } }
+      if (ok) res = { kind: 'fn', f: x => { const v = c.evaluate({ x }); return typeof v === 'number' ? v : (v && Math.abs(v.im) < 1e-9 ? v.re : NaN); } };
+    }
+  } catch (e) { res = null; }
+  if (res === null) res = { kind: 'bad' };
+  fnCache.set(key, res);
+  return res;
+}
+function niceStep(range, target) {
+  const raw = range / target, p = Math.pow(10, Math.floor(Math.log10(raw))), m = raw / p;
+  return (m < 1.5 ? 1 : m < 3 ? 2 : m < 7 ? 5 : 10) * p;
+}
+const fmtNum = v => { const r = Math.round(v * 1e6) / 1e6; return Math.abs(r) >= 1e5 || (Math.abs(r) < 1e-3 && r !== 0) ? r.toExponential(0) : String(r).replace('-', '−'); };
+
+function graphEl(r) {
+  const g = el('g');
+  const { x, y, w, h } = r;
+  const xmin = +r.xmin, xmax = +r.xmax, ymin = +r.ymin, ymax = +r.ymax;
+  const t = T(), ink = color('ink');
+  const sx = v => x + (v - xmin) / (xmax - xmin) * w, sy = v => y + h - (v - ymin) / (ymax - ymin) * h;
+  const cid = 'clip-' + r.id + '-' + Math.random().toString(36).slice(2, 6);
+  const cp = el('clipPath', { id: cid }, el('defs', null, g)); el('rect', { x, y, width: w, height: h }, cp);
+  el('rect', { x, y, width: w, height: h, fill: t.bg, stroke: t.major, 'stroke-width': 1.2, rx: 3 }, g);
+  const inner = el('g', { 'clip-path': `url(#${cid})` }, g);
+  if (!(xmax > xmin && ymax > ymin)) return g;
+  const xs = niceStep(xmax - xmin, Math.max(4, w / 45)), ys = niceStep(ymax - ymin, Math.max(4, h / 45));
+  let gd = '', ad = '';
+  if (r.grid !== 0) {
+    for (let v = Math.ceil(xmin / xs) * xs; v <= xmax + 1e-9; v += xs) gd += `M${sx(v).toFixed(1)} ${y}V${y + h}`;
+    for (let v = Math.ceil(ymin / ys) * ys; v <= ymax + 1e-9; v += ys) gd += `M${x} ${sy(v).toFixed(1)}H${x + w}`;
+    el('path', { d: gd, stroke: t.major, 'stroke-width': .8, fill: 'none' }, inner);
+  }
+  const ax = clamp(sx(0), x, x + w), ay = clamp(sy(0), y, y + h);
+  const xAxisIn = ymin <= 0 && ymax >= 0, yAxisIn = xmin <= 0 && xmax >= 0;
+  if (xAxisIn) ad += `M${x} ${ay}H${x + w}`;
+  if (yAxisIn) ad += `M${ax} ${y}V${y + h}`;
+  el('path', { d: ad, stroke: ink, 'stroke-width': 1.5, fill: 'none', opacity: .85 }, inner);
+  const lab = el('g', { 'font-size': 11, fill: ink, opacity: .7, 'font-family': 'DM Sans, sans-serif' }, inner);
+  const ly = xAxisIn ? ay + 13 : y + h - 4, lx = yAxisIn ? ax - 4 : x + 4;
+  for (let v = Math.ceil(xmin / xs) * xs; v <= xmax + 1e-9; v += xs) {
+    if (Math.abs(v) < xs / 1e6) continue; const px = sx(v); if (px < x + 8 || px > x + w - 8) continue;
+    el('text', { x: px, y: ly, 'text-anchor': 'middle' }, lab).textContent = fmtNum(v);
+    if (xAxisIn) el('path', { d: `M${px} ${ay - 3}v6`, stroke: ink, 'stroke-width': 1 }, inner);
+  }
+  for (let v = Math.ceil(ymin / ys) * ys; v <= ymax + 1e-9; v += ys) {
+    if (Math.abs(v) < ys / 1e6) continue; const py = sy(v); if (py < y + 8 || py > y + h - 6) continue;
+    el('text', { x: lx, y: py + 4, 'text-anchor': yAxisIn ? 'end' : 'start' }, lab).textContent = fmtNum(v);
+    if (yAxisIn) el('path', { d: `M${ax - 3} ${py}h6`, stroke: ink, 'stroke-width': 1 }, inner);
+  }
+  if (xAxisIn && yAxisIn) el('text', { x: ax - 4, y: ay + 13, 'text-anchor': 'end' }, lab).textContent = '0';
+  const labels = [];
+  for (const fn of (r.fns || [])) {
+    const p = parseFn(fn.e || ''); if (!p) continue;
+    const col = color(fn.c);
+    if (p.kind === 'fn') {
+      const N = Math.max(240, Math.round(w * 1.5)); let d = '', pen = false, prev = null;
+      for (let i = 0; i <= N; i++) {
+        const xv = xmin + (xmax - xmin) * i / N; let yv;
+        try { yv = p.f(xv); } catch { yv = NaN; }
+        if (!isFinite(yv)) { pen = false; prev = null; continue; }
+        const py = clamp(sy(yv), y - h * 2, y + h * 3);
+        if (prev !== null && Math.abs(py - prev) > h * 1.5) pen = false;
+        d += (pen ? 'L' : 'M') + sx(xv).toFixed(1) + ' ' + py.toFixed(1); pen = true; prev = py;
+      }
+      el('path', { d, stroke: col, 'stroke-width': 2.6, fill: 'none', 'stroke-linejoin': 'round', 'stroke-linecap': 'round' }, inner);
+    } else if (p.kind === 'vline') {
+      el('path', { d: `M${sx(p.x)} ${y}V${y + h}`, stroke: col, 'stroke-width': 2.6 }, inner);
+    } else if (p.kind === 'point') {
+      el('circle', { cx: sx(p.x), cy: sy(p.y), r: 4.8, fill: col }, inner);
+      labels.push([sx(p.x) + 8, sy(p.y) - 8, p.label, col]);
+    }
+  }
+  for (const [lx2, ly2, txt, col] of labels) {
+    const tt = el('text', { x: lx2, y: ly2, 'font-size': 13, 'font-weight': 600, fill: col, 'font-family': 'DM Sans, sans-serif', stroke: t.bg, 'stroke-width': 3, 'paint-order': 'stroke' }, inner);
+    tt.textContent = txt;
+  }
+  return g;
+}
+function numlineEl(r) {
+  const g = el('g'); const col = color(r.c), ink = col;
+  const { x, y, w } = r, min = +r.min, max = +r.max, step = Math.abs(+r.step) || 1;
+  el('rect', { x: x - 6, y: y - 22, width: w + 12, height: 52, fill: 'transparent' }, g);
+  el('line', { x1: x, y1: y, x2: x + w, y2: y, stroke: ink, 'stroke-width': 2 }, g);
+  arrowHead(g, x + w - 1, y, x + w + 6, y, 1.6, ink); arrowHead(g, x + 1, y, x - 6, y, 1.6, ink);
+  if (!(max > min)) return g;
+  const pad = 18, sx = v => x + pad + (v - min) / (max - min) * (w - pad * 2);
+  const n = Math.min(200, Math.round((max - min) / step));
+  for (let i = 0; i <= n; i++) {
+    const v = min + i * step, px = sx(v);
+    el('line', { x1: px, y1: y - 7, x2: px, y2: y + 7, stroke: ink, 'stroke-width': 1.6 }, g);
+    el('text', { x: px, y: y + 24, 'text-anchor': 'middle', 'font-size': 13, fill: ink, 'font-family': 'DM Sans, sans-serif' }, g).textContent = fmtNum(v);
+  }
+  for (const m of String(r.marks || '').split(',')) {
+    const s = m.trim(); if (!s) continue;
+    const open = /^o/i.test(s), v = parseFloat(s.replace(/^o/i, '').replace('−', '-'));
+    if (!isFinite(v) || v < min || v > max) continue;
+    el('circle', { cx: sx(v), cy: y, r: 6, fill: open ? T().bg : color('blue'), stroke: color('blue'), 'stroke-width': 2.4 }, g);
+  }
+  return g;
+}
+function buildEl(r) {
+  let g;
+  switch (r.t) {
+    case 'stroke': g = strokeEl(r); break;
+    case 'line': case 'rect': case 'ellipse': case 'tri': case 'rtri': case 'axes': g = shapeEl(r); break;
+    case 'text': g = textEl(r); break;
+    case 'math': g = mathEl(r); break;
+    case 'graph': g = graphEl(r); break;
+    case 'numline': g = numlineEl(r); break;
+    case 'image': g = el('image', { href: r.src, x: r.x, y: r.y, width: r.w, height: r.h, preserveAspectRatio: 'none' }); break;
+    default: g = el('g');
+  }
+  if (r.rot && Array.isArray(r.rc)) { const w = el('g'); g.setAttribute('transform', `rotate(${r.rot} ${r.rc[0]} ${r.rc[1]})`); w.appendChild(g); g = w; }
+  return g;
+}
+
+/* =========================================================
+   View (pan / zoom)
+   ========================================================= */
+let V = { tx: 90, ty: 90, z: 1 };
+const SHEETS = { landscape: [1600, 1000], portrait: [850, 1100], tall: [1200, 2400] };
+function sheet(pid = curPage) { const p = recs.get(pid); return p && isNum(p.w) && isNum(p.h) && p.w >= 200 && p.h >= 200 ? { w: p.w, h: p.h } : { w: 1600, h: 1000 }; }
+function applySheet() {
+  const { w, h } = sheet();
+  for (const id of ['bgRect', 'patRect', 'sheetClipRect']) { const e = $('#' + id); e.setAttribute('width', w); e.setAttribute('height', h); }
+  const sh = $('#sheetShadow'); sh.setAttribute('x', 4); sh.setAttribute('y', 6); sh.setAttribute('width', w); sh.setAttribute('height', h);
+}
+function viewArea() { const b = board.getBoundingClientRect(); const top = topbarBottom(), dk = $('#toolbar'), bottom = dk ? Math.max(14, Math.round(b.height - dk.getBoundingClientRect().top) + 8 + 78) : 64, left = 14, right = 14; return { b, x: left, y: top, w: Math.max(100, b.width - left - right), h: Math.max(100, b.height - top - bottom) }; }
+function topbarBottom() {
+  const tb = $('#topbar'), btm = tb ? Math.round(tb.getBoundingClientRect().bottom) + 10 : 64;
+  document.documentElement.style.setProperty('--tb', btm + 'px');
+  return btm;
+}
+function screenSheet() {
+  const a = viewArea(), ar = clamp(a.h / a.w, .4, 2.6);
+  return a.w >= a.h ? { w: 1600, h: Math.round(1600 * ar) } : { w: 1000, h: Math.round(1000 * ar) };
+}
+function fitZoom() { const { w, h } = sheet(), a = viewArea(); return Math.min(a.w / w, a.h / h); }
+function fitView() { const { w, h } = sheet(), a = viewArea(), z = fitZoom(); return { z, tx: a.x + (a.w - w * z) / 2, ty: a.y + (a.h - h * z) / 2 }; }
+function fitWidthView() { const { w } = sheet(), a = viewArea(), z = Math.max(fitZoom(), a.w / w); return { z, tx: a.x + (a.w - w * z) / 2, ty: a.y }; }
+function constrainView() {
+  const { w, h } = sheet(), a = viewArea(), fz = fitZoom();
+  if (!isNum(V.z) || !isNum(V.tx) || !isNum(V.ty)) V = fitView();
+  V.z = clamp(V.z, fz, Math.max(fz, 6));
+  const sw = w * V.z, sh = h * V.z;
+  V.tx = sw <= a.w ? a.x + (a.w - sw) / 2 : clamp(V.tx, a.x + a.w - sw, a.x);
+  V.ty = sh <= a.h ? a.y + (a.h - sh) / 2 : clamp(V.ty, a.y + a.h - sh, a.y);
+}
+function applyView(fromFollow) {
+  constrainView();
+  world.setAttribute('transform', `translate(${V.tx.toFixed(2)} ${V.ty.toFixed(2)}) scale(${V.z.toFixed(4)})`);
+  $('#zoomLabel').textContent = Math.round(V.z * 100) + '%';
+  views[curPage] = { ...V };
+  if (!fromFollow && Live.following) Live.unfollow();
+  renderSelection(); Live.viewChanged(); renderPeers();
+  if (textEdit) closeTextEditor(true);
+}
+function screenToWorld(cx, cy) { const b = board.getBoundingClientRect(); return { x: (cx - b.left - V.tx) / V.z, y: (cy - b.top - V.ty) / V.z }; }
+function zoomAt(f, cx, cy) {
+  const b = board.getBoundingClientRect(); cx = cx ?? b.width / 2; cy = cy ?? b.height / 2;
+  const nz = clamp(V.z * f, fitZoom(), Math.max(fitZoom(), 6)), wx = (cx - V.tx) / V.z, wy = (cy - V.ty) / V.z;
+  V.z = nz; V.tx = cx - wx * nz; V.ty = cy - wy * nz; applyView();
+}
+function viewCenter() { const b = board.getBoundingClientRect(); return { x: (b.width / 2 - V.tx) / V.z, y: (b.height / 2 - V.ty) / V.z }; }
+function contentBox(ids) {
+  let x1 = Infinity, y1 = Infinity, x2 = -Infinity, y2 = -Infinity;
+  for (const id of ids) { const b = bbox(id); if (!b) continue; x1 = Math.min(x1, b.x); y1 = Math.min(y1, b.y); x2 = Math.max(x2, b.x + b.w); y2 = Math.max(y2, b.y + b.h); }
+  return isFinite(x1) ? { x: x1, y: y1, w: x2 - x1, h: y2 - y1 } : null;
+}
+function fitContent() { V = fitView(); applyView(); }
+function defaultView() { const { w, h } = sheet(); return h / w > 1.6 ? fitWidthView() : fitView(); }
+
+/* =========================================================
+   Pages
+   ========================================================= */
+function goPage(id, silent) {
+  if (id === curPage && !silent) return;
+  clearSelection(); closeEditors();
+  curPage = id;
+  applySheet();
+  V = views[id] ? { ...views[id] } : defaultView();
+  renderPage(); applyView(true); updatePageUI(); Live.viewChanged();
+}
+function updatePageUI() {
+  const ps = pages(), i = ps.findIndex(p => p.id === curPage);
+  $('#pageLabel').textContent = `${i + 1} / ${ps.length}`;
+  $('#prevPage').disabled = i <= 0;
+  $('#nextPage').disabled = i >= ps.length - 1;
+}
+function stepPage(d) { const ps = pages(), i = ps.findIndex(p => p.id === curPage); const n = ps[i + d]; if (n) goPage(n.id); }
+function addPage(afterCopy) {
+  const ps = pages(), i = ps.findIndex(p => p.id === curPage);
+  const a = ps[i] ? ps[i].z : 0, b = ps[i + 1] ? ps[i + 1].z : a + 2000;
+  const id = 'p' + uid();
+  const cs = sheet(), list = [{ id, k: 'page', del: 0, z: a + (b - a) / 2, w: cs.w, h: cs.h }];
+  if (afterCopy) for (const r of pageItems()) { const c = clone(r); c.id = uid(); c.page = id; c.z = nextZ(); list.push(c); }
+  commit(list); goPage(id);
+}
+
+/* =========================================================
+   Selection
+   ========================================================= */
+const selection = new Set();
+const RESIZABLE = new Set(['graph', 'image', 'math', 'text', 'numline']);
+function clearSelection() { if (selection.size) { selection.clear(); renderSelection(); } else { updateSelBar(); updateTrash(); } }
+function renderSelection() {
+  selG.innerHTML = '';
+  for (const id of [...selection]) if (!elems.has(id)) selection.delete(id);
+  if (!selection.size) { updateSelBar(); updateTrash(); return; }
+  const pad = 5 / V.z;
+  for (const id of selection) {
+    const b = bbox(id); if (!b) continue;
+    el('rect', { x: b.x - pad, y: b.y - pad, width: b.w + pad * 2, height: b.h + pad * 2, fill: 'none', stroke: '#4c7dff', 'stroke-width': 1.5, 'stroke-dasharray': '5 4', 'vector-effect': 'non-scaling-stroke', rx: 3 / V.z }, selG);
+  }
+  updateSelBar(); updateTrash();
+  const rh = rotHandle();
+  if (rh && !(action && (action.kind === 'move' || action.kind === 'rotate'))) {
+    el('line', { x1: rh.x, y1: rh.top, x2: rh.x, y2: rh.y + rh.r, stroke: '#4c7dff', 'stroke-width': 1.5, 'vector-effect': 'non-scaling-stroke' }, selG);
+    const hg = el('g', { style: 'cursor:grab' }, selG);
+    el('circle', { cx: rh.x, cy: rh.y, r: rh.r, fill: '#fff', stroke: '#4c7dff', 'stroke-width': 1.8, 'vector-effect': 'non-scaling-stroke' }, hg);
+    const ar = rh.r * .55;
+    el('path', { d: `M${rh.x - ar} ${rh.y}a${ar} ${ar} 0 1 1 ${ar} ${ar}`, fill: 'none', stroke: '#4c7dff', 'stroke-width': 1.6, 'stroke-linecap': 'round', 'vector-effect': 'non-scaling-stroke' }, hg);
+  }
+  const h = handleRect();
+  if (h) el('rect', { x: h.x, y: h.y, width: h.s, height: h.s, fill: '#fff', stroke: '#4c7dff', 'stroke-width': 1.8, 'vector-effect': 'non-scaling-stroke', rx: 2 / V.z, style: 'cursor:nwse-resize' }, selG);
+}
+function updateTrash() {
+  const t = $('#selTrash'); if (!t) return;
+  if (!selection.size || (action && (action.kind === 'move' || action.kind === 'rotate' || action.kind === 'resize'))) { t.classList.remove('show'); return; }
+  const cb = selBox(); if (!cb) { t.classList.remove('show'); return; }
+  const b = board.getBoundingClientRect(), pad = 5;
+  const x = b.left + V.tx + (cb.x + cb.w) * V.z + pad, y = b.top + V.ty + cb.y * V.z - pad;
+  t.classList.add('show');
+  t.style.left = clamp(x + 8, 4, innerWidth - 34) + 'px';
+  t.style.top = clamp(y - 26, 4, innerHeight - 34) + 'px';
+}
+function updateSelBar() {
+  const bar = $('#selBar'); if (!bar) return;
+  const imgs = [...selection].map(id => recs.get(id)).filter(r => r && r.t === 'image');
+  if (!imgs.length || imgs.length !== selection.size || (action && action.kind === 'move')) { bar.classList.remove('show'); return; }
+  const cb = contentBox(imgs.map(r => r.id)); if (!cb) { bar.classList.remove('show'); return; }
+  const allEr = imgs.every(r => r.er);
+  $('#eraseLockBtn').innerHTML = allEr
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>Eraser can remove this · Protect'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Protected from eraser · Allow erasing';
+  bar.classList.add('show');
+  const b = board.getBoundingClientRect();
+  const x = b.left + V.tx + (cb.x + cb.w / 2) * V.z, y = b.top + V.ty + (cb.y + cb.h) * V.z;
+  bar.style.left = clamp(x - bar.offsetWidth / 2, 10, innerWidth - bar.offsetWidth - 10) + 'px';
+  bar.style.top = clamp(y + 14, 64, innerHeight - 170) + 'px';
+}
+function handleRect() {
+  if (selection.size !== 1) return null;
+  const id = [...selection][0], r = recs.get(id); if (!r || !RESIZABLE.has(r.t)) return null;
+  const b = bbox(id); if (!b) return null; const s = 12 / V.z, pad = 5 / V.z;
+  return { x: b.x + b.w + pad - s / 2, y: b.y + b.h + pad - s / 2, s, id };
+}
+
+/* =========================================================
+   Hit testing
+   ========================================================= */
+function segDist(px, py, ax, ay, bx, by) {
+  const dx = bx - ax, dy = by - ay, l = dx * dx + dy * dy;
+  let t = l ? ((px - ax) * dx + (py - ay) * dy) / l : 0; t = clamp(t, 0, 1);
+  return Math.hypot(px - (ax + t * dx), py - (ay + t * dy));
+}
+function polyDist(px, py, pts) {
+  if (pts.length === 1) return Math.hypot(px - pts[0][0], py - pts[0][1]);
+  let m = Infinity; for (let i = 1; i < pts.length; i++) m = Math.min(m, segDist(px, py, pts[i - 1][0], pts[i - 1][1], pts[i][0], pts[i][1])); return m;
+}
+function hitsItem(r, p, tol, forEraser) {
+  const b = bbox(r.id); if (!b) return false;
+  if (p.x < b.x - tol || p.x > b.x + b.w + tol || p.y < b.y - tol || p.y > b.y + b.h + tol) return false;
+  if (r.t === 'stroke') return polyDist(p.x, p.y, r.pts) <= r.w / 2 + tol;
+  if (r.t === 'line') return segDist(p.x, p.y, r.x1, r.y1, r.x2, r.y2) <= r.w / 2 + tol + 2;
+  if (forEraser && (r.t === 'rect' || r.t === 'tri' || r.t === 'rtri' || r.t === 'ellipse' || r.t === 'axes')) {
+    const inX = p.x > b.x + tol + r.w && p.x < b.x + b.w - tol - r.w, inY = p.y > b.y + tol + r.w && p.y < b.y + b.h - tol - r.w;
+    return !(inX && inY) || r.t === 'axes';
+  }
+  return true;
+}
+function hitTop(p) {
+  const tol = 6 / V.z;
+  for (let c = itemsG.lastElementChild; c; c = c.previousElementSibling) {
+    const r = recs.get(c.dataset.id); if (r && hitsItem(r, p, tol, false)) return r;
+  }
+  return null;
+}
+const ERASE_SKIP = new Set(['graph', 'image', 'numline']);
+
+/* =========================================================
+   Stroke simplification (keeps each record small enough to sync)
+   ========================================================= */
+function rdp(pts, eps) {
+  if (pts.length < 3) return pts;
+  const keep = new Uint8Array(pts.length); keep[0] = keep[pts.length - 1] = 1;
+  const stack = [[0, pts.length - 1]];
+  while (stack.length) {
+    const [a, b] = stack.pop(); let md = 0, mi = -1;
+    for (let i = a + 1; i < b; i++) { const d = segDist(pts[i][0], pts[i][1], pts[a][0], pts[a][1], pts[b][0], pts[b][1]); if (d > md) { md = d; mi = i; } }
+    if (md > eps && mi > 0) { keep[mi] = 1; stack.push([a, mi], [mi, b]); }
+  }
+  return pts.filter((_, i) => keep[i]);
+}
+function finalizeStroke(base, pts) {
+  let eps = .35 / V.z, s = rdp(pts, eps), out = [];
+  const size = q => bytes(JSON.stringify(Object.assign({}, base, { pts: q, id: 'xxxxxxxxxxxxxxx', v: 1e6, a: ACTOR }))) ;
+  for (let i = 0; i < 5 && size(s) > 3300; i++) { eps *= 1.7; s = rdp(pts, eps); }
+  const split = q => { if (q.length < 8 || size(q) <= 3300) { out.push(q); return; } const m = q.length >> 1; split(q.slice(0, m + 1)); split(q.slice(m)); };
+  split(s);
+  return out.map(q => Object.assign({}, base, { id: uid(), pts: q, z: nextZ() }));
+}
+
+/* =========================================================
+   Pointer input
+   ========================================================= */
+const pointers = new Map();
+let action = null, spaceDown = false, penSeen = false, pinch = null;
+let lastWorldPt = null;
+
+function setTool(t) {
+  if (t !== S.tool) S.styleHidden = false;
+  S.tool = t;
+  $$('#toolbar .tbtn[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
+  board.setAttribute('class', 'tool-' + t);
+  if (t !== 'select') clearSelection();
+  tempG.innerHTML = '';
+  $('#shapeFly').classList.remove('open');
+  updateStylebar();
+}
+function onDown(e) {
+  if (e.button === 2) return;
+  e.preventDefault();
+  closePops();
+  if (textEdit) { closeTextEditor(true); if (S.tool === 'text') return; }
+  board.setPointerCapture && board.setPointerCapture(e.pointerId);
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, type: e.pointerType });
+  if (e.pointerType === 'pen') penSeen = true;
+  const touches = [...pointers.values()].filter(p => p.type === 'touch');
+  if (touches.length === 2) { cancelAction(); startPinch(); return; }
+  if (pointers.size > 1) return;
+  const p = screenToWorld(e.clientX, e.clientY); lastWorldPt = p;
+  const pan = S.tool === 'hand' || spaceDown || e.button === 1 || (e.pointerType === 'touch' && penSeen);
+  if (pan) { action = { kind: 'pan', sx: e.clientX, sy: e.clientY, tx: V.tx, ty: V.ty }; board.classList.add('panning'); return; }
+  switch (S.tool) {
+    case 'pen': case 'hl': {
+      const hl = S.tool === 'hl';
+      const pt = [rd(p.x), rd(p.y)]; if (!hl && e.pointerType === 'pen') pt.push(Math.round((e.pressure || .5) * 100) / 100);
+      action = { kind: 'draw', hl, pressure: !hl && e.pointerType === 'pen', pts: [pt], el: null };
+      drawTemp(); break;
+    }
+    case 'eraser': action = { kind: 'erase', path: [[p.x, p.y]], r: ERASER_R[S.esize], hits: new Set(), whole: new Set() }; eraseAt(p); break;
+    case 'laser': action = { kind: 'laser' }; Laser.add(p); break;
+    case 'shape': action = { kind: 'shape', t: S.shape, x1: p.x, y1: p.y, x2: p.x, y2: p.y }; break;
+    case 'text': {
+      const hit = hitTop(p);
+      if (hit && hit.t === 'text') openTextEditor(hit); else openTextEditor(null, p);
+      break;
+    }
+    case 'math': {
+      const hit = hitTop(p);
+      if (hit && hit.t === 'math') openMathEditor(hit); else openMathEditor(null, p);
+      break;
+    }
+    case 'select': {
+      const rh = rotHandle();
+      if (rh && Math.hypot(p.x - rh.x, p.y - rh.y) <= rh.r + 9 / V.z) {
+        action = { kind: 'rotate', cx: rh.cx, cy: rh.cy, a0: Math.atan2(p.y - rh.cy, p.x - rh.cx), deg: 0 };
+        $('#selTrash').classList.remove('show'); $('#selBar').classList.remove('show'); break;
+      }
+      const h = handleRect();
+      if (h && p.x >= h.x - 4 / V.z && p.x <= h.x + h.s + 4 / V.z && p.y >= h.y - 4 / V.z && p.y <= h.y + h.s + 4 / V.z) {
+        const r = recs.get(h.id); action = { kind: 'resize', r: clone(r), b: { ...bbox(h.id) }, sx: p.x, sy: p.y }; break;
+      }
+      const hit = hitTop(p);
+      if (hit) {
+        if (e.shiftKey) { selection.has(hit.id) ? selection.delete(hit.id) : selection.add(hit.id); }
+        else if (!selection.has(hit.id)) { selection.clear(); selection.add(hit.id); }
+        renderSelection(); updateStylebar();
+        action = { kind: 'move', sx: p.x, sy: p.y, dx: 0, dy: 0 };
+      } else {
+        if (!e.shiftKey) selection.clear();
+        renderSelection(); updateStylebar();
+        action = { kind: 'marquee', x1: p.x, y1: p.y, x2: p.x, y2: p.y, base: new Set(selection) };
+      }
+      break;
+    }
+  }
+}
+function onMove(e) {
+  const p = screenToWorld(e.clientX, e.clientY);
+  if (e.pointerType !== 'touch' || !penSeen) Live.cursor(p);
+  if (!pointers.has(e.pointerId)) return;
+  pointers.set(e.pointerId, { x: e.clientX, y: e.clientY, type: e.pointerType });
+  if (pinch) { updatePinch(); return; }
+  if (!action) return;
+  switch (action.kind) {
+    case 'pan': V.tx = action.tx + e.clientX - action.sx; V.ty = action.ty + e.clientY - action.sy; applyView(); break;
+    case 'draw': {
+      const evs = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+      for (const ce of (evs.length ? evs : [e])) {
+        const q = screenToWorld(ce.clientX, ce.clientY), l = action.pts[action.pts.length - 1];
+        if (Math.hypot(q.x - l[0], q.y - l[1]) < .9 / V.z) continue;
+        const pt = [rd(q.x), rd(q.y)]; if (action.pressure) pt.push(Math.round((ce.pressure || .5) * 100) / 100);
+        action.pts.push(pt);
+      }
+      drawTemp(); break;
+    }
+    case 'erase': eraseAt(p); break;
+    case 'laser': Laser.add(p); break;
+    case 'shape': {
+      let x2 = p.x, y2 = p.y;
+      if (e.shiftKey) {
+        if (action.t === 'line') { const a = Math.atan2(y2 - action.y1, x2 - action.x1), sn = Math.round(a / (Math.PI / 12)) * Math.PI / 12, L = Math.hypot(x2 - action.x1, y2 - action.y1); x2 = action.x1 + L * Math.cos(sn); y2 = action.y1 + L * Math.sin(sn); }
+        else { const s = Math.max(Math.abs(x2 - action.x1), Math.abs(y2 - action.y1)); x2 = action.x1 + s * Math.sign(x2 - action.x1 || 1); y2 = action.y1 + s * Math.sign(y2 - action.y1 || 1); }
+      }
+      action.x2 = x2; action.y2 = y2; drawTemp(); break;
+    }
+    case 'move': {
+      action.dx = p.x - action.sx; action.dy = p.y - action.sy;
+      for (const id of selection) { const g = elems.get(id); if (g) g.setAttribute('transform', `translate(${action.dx} ${action.dy})`); }
+      selG.setAttribute('transform', `translate(${action.dx} ${action.dy})`);
+      $('#selBar').classList.remove('show'); $('#selTrash').classList.remove('show');
+      break;
+    }
+    case 'rotate': {
+      let deg = (Math.atan2(p.y - action.cy, p.x - action.cx) - action.a0) * 180 / Math.PI;
+      if (e.shiftKey) deg = Math.round(deg / 15) * 15;
+      action.deg = deg;
+      for (const id of selection) { const g = elems.get(id); if (g) g.setAttribute('transform', `rotate(${deg} ${action.cx} ${action.cy})`); }
+      selG.setAttribute('transform', `rotate(${deg} ${action.cx} ${action.cy})`);
+      break;
+    }
+    case 'resize': {
+      const r = previewResize(action, p);
+      renderItem(r); bbCache.delete(r.id); renderSelection(); break;
+    }
+    case 'marquee': {
+      action.x2 = p.x; action.y2 = p.y;
+      const n = norm(action);
+      selection.clear(); action.base.forEach(id => selection.add(id));
+      for (const [id] of elems) { const b = bbox(id); if (b && b.x >= n.x && b.y >= n.y && b.x + b.w <= n.x + n.w && b.y + b.h <= n.y + n.h) selection.add(id); }
+      renderSelection(); drawTemp(); break;
+    }
+  }
+}
+function onUp(e) {
+  pointers.delete(e.pointerId);
+  if (pinch) { if (pointers.size < 2) pinch = null; return; }
+  if (!action) return;
+  const a = action; action = null;
+  board.classList.remove('panning');
+  tempG.innerHTML = '';
+  switch (a.kind) {
+    case 'draw': {
+      const base = { k: 'item', del: 0, page: curPage, t: 'stroke', c: a.hl ? S.hl : S.color, w: (a.hl ? HL_W : PEN_W)[S.size] };
+      if (a.hl) base.hl = 1;
+      commit(finalizeStroke(base, a.pts)); break;
+    }
+    case 'erase': {
+      const list = [];
+      for (const id of a.whole) { const r = recs.get(id); if (r) list.push(Object.assign(clone(r), { del: 1 })); }
+      for (const id of a.hits) {
+        const r = recs.get(id); if (!r || a.whole.has(id)) continue;
+        const pieces = splitStroke(r, a.path, a.r); if (!pieces) continue;
+        list.push(Object.assign(clone(r), { del: 1 }));
+        for (const pc of pieces) {
+          const base = clone(r); delete base.v; delete base.a;
+          for (const n of finalizeStrokePieces(base, pc)) list.push(n);
+        }
+      }
+      resetEraseView();
+      commit(list);
+      tempG.innerHTML = '';
+      break;
+    }
+    case 'laser': Laser.end(); break;
+    case 'shape': {
+      const { t, x1, y1, x2, y2 } = a;
+      if (Math.hypot(x2 - x1, y2 - y1) < 4 / V.z) break;
+      const r = { id: uid(), k: 'item', del: 0, page: curPage, z: nextZ(), c: S.color, w: SHAPE_W[S.size], x1: rd(x1), y1: rd(y1), x2: rd(x2), y2: rd(y2) };
+      if (t === 'arrow') { r.t = 'line'; r.arrow = 1; } else r.t = t;
+      commit([r]); break;
+    }
+    case 'move': {
+      selG.removeAttribute('transform');
+      if (Math.abs(a.dx) < .5 / V.z && Math.abs(a.dy) < .5 / V.z) { for (const id of selection) elems.get(id)?.removeAttribute('transform'); renderSelection(); break; }
+      commit([...selection].map(id => translated(recs.get(id), a.dx, a.dy)).filter(Boolean));
+      break;
+    }
+    case 'resize': {
+      const r = previewResize(a, screenToWorld(e.clientX, e.clientY));
+      commit([r]); break;
+    }
+    case 'rotate': {
+      selG.removeAttribute('transform');
+      for (const id of selection) elems.get(id)?.removeAttribute('transform');
+      if (Math.abs(a.deg) < .5) { renderSelection(); break; }
+      commit([...selection].map(id => rotated(recs.get(id), a.deg, a.cx, a.cy)).filter(Boolean));
+      break;
+    }
+    case 'marquee': updateStylebar(); break;
+  }
+}
+function cancelAction() {
+  if (!action) return;
+  if (action.kind === 'move' || action.kind === 'rotate') { for (const id of selection) elems.get(id)?.removeAttribute('transform'); selG.removeAttribute('transform'); }
+  if (action.kind === 'erase') resetEraseView();
+  if (action.kind === 'resize') renderItem(recs.get(action.r.id));
+  if (action.kind === 'laser') Laser.end();
+  action = null; tempG.innerHTML = '';
+}
+function startPinch() {
+  const [a, b] = [...pointers.values()].filter(p => p.type === 'touch');
+  pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), mx: (a.x + b.x) / 2, my: (a.y + b.y) / 2, V: { ...V } };
+}
+function updatePinch() {
+  const ts = [...pointers.values()].filter(p => p.type === 'touch'); if (ts.length < 2) return;
+  const [a, b] = ts, d = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
+  const br = board.getBoundingClientRect(), z = clamp(pinch.V.z * d / pinch.d, fitZoom(), Math.max(fitZoom(), 6));
+  const wx = (pinch.mx - br.left - pinch.V.tx) / pinch.V.z, wy = (pinch.my - br.top - pinch.V.ty) / pinch.V.z;
+  V = { z, tx: mx - br.left - wx * z, ty: my - br.top - wy * z }; applyView();
+}
+function translated(r, dx, dy) {
+  if (!r) return null; const n = clone(r);
+  if (n.pts) n.pts = n.pts.map(q => { const o = [rd(q[0] + dx), rd(q[1] + dy)]; if (q.length > 2) o.push(q[2]); return o; });
+  if ('x1' in n) { n.x1 = rd(n.x1 + dx); n.y1 = rd(n.y1 + dy); n.x2 = rd(n.x2 + dx); n.y2 = rd(n.y2 + dy); }
+  if ('x' in n) { n.x = rd(n.x + dx); n.y = rd(n.y + dy); }
+  if (Array.isArray(n.rc)) n.rc = [rd(n.rc[0] + dx), rd(n.rc[1] + dy)];
+  return n;
+}
+function rotPt(x, y, cx, cy, deg) { const a = deg * Math.PI / 180, c = Math.cos(a), s2 = Math.sin(a), dx = x - cx, dy = y - cy; return [cx + dx * c - dy * s2, cy + dx * s2 + dy * c]; }
+function rotated(r, deg, cx, cy) {
+  if (!r) return null; const n = clone(r);
+  if (n.t === 'stroke') { n.pts = n.pts.map(q => { const [x, y] = rotPt(q[0], q[1], cx, cy, deg); const o = [rd(x), rd(y)]; if (q.length > 2) o.push(q[2]); return o; }); return n; }
+  if (n.t === 'line') { const a = rotPt(n.x1, n.y1, cx, cy, deg), b = rotPt(n.x2, n.y2, cx, cy, deg); n.x1 = rd(a[0]); n.y1 = rd(a[1]); n.x2 = rd(b[0]); n.y2 = rd(b[1]); return n; }
+  let oc = Array.isArray(r.rc) ? r.rc : null;
+  if (!oc) { const b = bbox(r.id); if (!b) return n; oc = [b.x + b.w / 2, b.y + b.h / 2]; }
+  const nc = rotPt(oc[0], oc[1], cx, cy, deg);
+  const t = translated(Object.assign(n, { rc: oc }), nc[0] - oc[0], nc[1] - oc[1]);
+  t.rot = Math.round((((r.rot || 0) + deg) % 360 + 360) % 360 * 10) / 10;
+  if (!t.rot) { delete t.rot; delete t.rc; }
+  return t;
+}
+function selBox() { return contentBox([...selection]); }
+function rotHandle() {
+  if (!selection.size) return null;
+  const cb = selBox(); if (!cb) return null;
+  const pad = 5 / V.z;
+  return { x: cb.x + cb.w / 2, y: cb.y - pad - 30 / V.z, r: 7 / V.z, top: cb.y - pad, cx: cb.x + cb.w / 2, cy: cb.y + cb.h / 2 };
+}
+function previewResize(a, p) {
+  const r = clone(a.r), b = a.b;
+  const nw = Math.max(30, b.w + (p.x - a.sx)), nh = Math.max(30, b.h + (p.y - a.sy));
+  if (r.t === 'graph') { r.w = rd(Math.max(140, r.w + p.x - a.sx)); r.h = rd(Math.max(120, r.h + p.y - a.sy)); }
+  else if (r.t === 'numline') { r.w = rd(Math.max(140, r.w + p.x - a.sx)); }
+  else if (r.t === 'image') { const k = nw / b.w; r.w = rd(a.r.w * k); r.h = rd(a.r.h * k); }
+  else if (r.t === 'math' || r.t === 'text') { const k = Math.max(nw / b.w, .2); r.size = Math.round(clamp(a.r.size * k, 8, 240)); }
+  if (r.rot && (r.t === 'image' || r.t === 'graph')) r.rc = [rd(r.x + r.w / 2), rd(r.y + r.h / 2)];
+  return r;
+}
+
+function drawTemp() {
+  tempG.innerHTML = '';
+  const a = action; if (!a) return;
+  if (a.kind === 'draw') {
+    const r = { t: 'stroke', pts: a.pts, c: a.hl ? S.hl : S.color, w: (a.hl ? HL_W : PEN_W)[S.size], hl: a.hl ? 1 : 0 };
+    tempG.appendChild(strokeEl(r));
+  } else if (a.kind === 'shape') {
+    const r = { t: a.t === 'arrow' ? 'line' : a.t, arrow: a.t === 'arrow' ? 1 : 0, x1: a.x1, y1: a.y1, x2: a.x2, y2: a.y2, c: S.color, w: SHAPE_W[S.size] };
+    tempG.appendChild(shapeEl(r));
+  } else if (a.kind === 'marquee') {
+    const n = norm(a);
+    el('rect', { x: n.x, y: n.y, width: n.w, height: n.h, fill: 'rgba(76,125,255,.08)', stroke: '#4c7dff', 'stroke-width': 1, 'vector-effect': 'non-scaling-stroke' }, tempG);
+  }
+}
+const ERASER_R = [6, 12, 22, 40, 75];
+function eraserCursor(p) {
+  tempG.innerHTML = '';
+  if (!p) return;
+  const r = action && action.kind === 'erase' ? action.r : ERASER_R[S.esize];
+  el('circle', { cx: p.x, cy: p.y, r, fill: 'rgba(120,130,150,.12)', stroke: T().dark ? 'rgba(255,255,255,.75)' : 'rgba(40,50,70,.65)', 'stroke-width': 1.3, 'vector-effect': 'non-scaling-stroke' }, tempG);
+}
+function resetEraseView() {
+  for (const g of itemsG.children) { g.removeAttribute('mask'); g.removeAttribute('opacity'); }
+  $('#eraseMaskPath').removeAttribute('d');
+}
+function eraseAt(p) {
+  const a = action, last = a.path[a.path.length - 1];
+  if (a.path.length > 1 && Math.hypot(p.x - last[0], p.y - last[1]) < .8 / V.z) { eraserCursor(p); return; }
+  if (a.path.length > 1 || p.x !== last[0] || p.y !== last[1]) a.path.push([p.x, p.y]);
+  const mp = $('#eraseMaskPath');
+  mp.setAttribute('d', a.path.length === 1 ? `M${last[0]} ${last[1]}l0.01 0` : 'M' + a.path.map(q => q[0].toFixed(1) + ' ' + q[1].toFixed(1)).join('L'));
+  mp.setAttribute('stroke-width', a.r * 2);
+  const s0 = a.path.length > 1 ? a.path[a.path.length - 2] : last, steps = Math.max(1, Math.ceil(Math.hypot(p.x - s0[0], p.y - s0[1]) / (a.r * .5)));
+  for (const [id, g] of elems) {
+    if (a.hits.has(id) || a.whole.has(id)) continue;
+    const r = recs.get(id); if (!r) continue;
+    const b = bbox(id); if (!b) continue;
+    const pad = a.r + (r.w || 0);
+    if (Math.max(p.x, s0[0]) < b.x - pad || Math.min(p.x, s0[0]) > b.x + b.w + pad || Math.max(p.y, s0[1]) < b.y - pad || Math.min(p.y, s0[1]) > b.y + b.h + pad) continue;
+    for (let k = 0; k <= steps; k++) {
+      const q = { x: s0[0] + (p.x - s0[0]) * k / steps, y: s0[1] + (p.y - s0[1]) * k / steps };
+      if (r.t === 'stroke') {
+        if (polyDist(q.x, q.y, r.pts) <= a.r + r.w / 2) { a.hits.add(id); g.setAttribute('mask', 'url(#eraseMask)'); break; }
+      } else if (!(ERASE_SKIP.has(r.t) && !(r.t === 'image' && r.er))) {
+        if (hitsItem(r, q, a.r, true)) { a.whole.add(id); g.setAttribute('opacity', '.2'); break; }
+      }
+    }
+  }
+  eraserCursor(p);
+}
+function densify(pts, step) {
+  if (pts.length < 2) return pts.map(q => q.slice());
+  const out = [pts[0].slice()];
+  for (let i = 1; i < pts.length; i++) {
+    const a = pts[i - 1], b = pts[i], d = Math.hypot(b[0] - a[0], b[1] - a[1]), n = Math.max(1, Math.ceil(d / step));
+    for (let k = 1; k <= n; k++) {
+      const t = k / n, q = [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t];
+      if (a.length > 2 && b.length > 2) q.push(Math.round((a[2] + (b[2] - a[2]) * t) * 100) / 100);
+      out.push(q);
+    }
+  }
+  return out;
+}
+function splitStroke(r, path, R) {
+  const thr = R + r.w * (r.hl ? .45 : .4);
+  const b = bbox(r.id) || { x: -1e9, y: -1e9, w: 2e9, h: 2e9 };
+  const segs = [];
+  for (let i = 0; i < path.length; i++) {
+    const a = path[Math.max(0, i - 1)], c = path[i];
+    if (Math.max(a[0], c[0]) < b.x - thr || Math.min(a[0], c[0]) > b.x + b.w + thr || Math.max(a[1], c[1]) < b.y - thr || Math.min(a[1], c[1]) > b.y + b.h + thr) continue;
+    segs.push([a, c]);
+  }
+  if (!segs.length) return null;
+  const dense = densify(r.pts, Math.max(.8, Math.min(R / 3, 3)));
+  const keep = dense.map(q => { for (const [a, c] of segs) if (segDist(q[0], q[1], a[0], a[1], c[0], c[1]) < thr) return false; return true; });
+  if (keep.every(Boolean)) return null;
+  const pieces = []; let cur = [];
+  dense.forEach((q, i) => { if (keep[i]) cur.push(q); else { if (cur.length >= 2) pieces.push(cur); cur = []; } });
+  if (cur.length >= 2) pieces.push(cur);
+  return pieces.map(pc => rdp(pc, .25).map(q => { const o = [rd(q[0]), rd(q[1])]; if (q.length > 2) o.push(q[2]); return o; }));
+}
+function finalizeStrokePieces(base, pts) {
+  const size = q => bytes(JSON.stringify(Object.assign({}, base, { pts: q, id: 'xxxxxxxxxxxxxxx', v: 1e6, a: ACTOR })));
+  const out = [];
+  const split = q => { if (q.length < 8 || size(q) <= 3300) { out.push(q); return; } const m = q.length >> 1; split(q.slice(0, m + 1)); split(q.slice(m)); };
+  split(pts);
+  return out.map(q => Object.assign({}, base, { id: uid(), pts: q }));
+}
+
+board.addEventListener('pointerdown', onDown);
+board.addEventListener('pointermove', onMove);
+board.addEventListener('pointerup', onUp);
+board.addEventListener('pointercancel', e => { pointers.delete(e.pointerId); cancelAction(); pinch = null; });
+board.addEventListener('pointerleave', e => { if (e.pointerType === 'mouse') { Live.cursor(null); if (S.tool === 'eraser' && !action) tempG.innerHTML = ''; } });
+board.addEventListener('contextmenu', e => e.preventDefault());
+board.addEventListener('wheel', e => {
+  e.preventDefault();
+  const b = board.getBoundingClientRect();
+  if (e.ctrlKey || e.metaKey) zoomAt(Math.exp(-e.deltaY * (e.deltaMode ? .05 : .0025)), e.clientX - b.left, e.clientY - b.top);
+  else { const k = e.deltaMode ? 16 : 1; V.tx -= (e.shiftKey && !e.deltaX ? e.deltaY : e.deltaX) * k; V.ty -= (e.shiftKey && !e.deltaX ? 0 : e.deltaY) * k; applyView(); }
+}, { passive: false });
+board.addEventListener('dblclick', e => {
+  if (S.tool !== 'select') return;
+  const r = hitTop(screenToWorld(e.clientX, e.clientY)); if (r && r.t === 'text') editItem(r);
+});
+function editItem(r) {
+  if (r.t === 'text') openTextEditor(r);
+  else if (r.t === 'math') openMathEditor(r);
+  else if (r.t === 'graph') openGraphEditor(r);
+  else if (r.t === 'numline') openNumEditor(r);
+}
+
+/* =========================================================
+   Laser pointer
+   ========================================================= */
+const Laser = {
+  trail: [], hoverPt: null, raf: 0,
+  add(p) { this.trail.push({ x: p.x, y: p.y, t: performance.now() }); this.loop(); Live.laser(this.trail.slice(-28).map(q => [rd(q.x), rd(q.y)])); },
+  end() { Live.laser(null); },
+  hover(p) { this.hoverPt = p; this.loop(); },
+  loop() { if (!this.raf) this.raf = requestAnimationFrame(() => this.frame()); },
+  frame() {
+    this.raf = 0; const now = performance.now();
+    this.trail = this.trail.filter(q => now - q.t < 650);
+    const g = $('#laserLayer') || el('g', { id: 'laserLayer' }, world);
+    g.innerHTML = '';
+    if (this.trail.length > 1) drawLaser(g, this.trail.map(q => [q.x, q.y]), '#ff3b3b');
+    if (S.tool === 'laser' && this.hoverPt) el('circle', { cx: this.hoverPt.x, cy: this.hoverPt.y, r: 5 / V.z, fill: '#ff3b3b', stroke: '#fff', 'stroke-width': 1.5 / V.z }, g);
+    else if (this.trail.length) { const l = this.trail[this.trail.length - 1]; el('circle', { cx: l.x, cy: l.y, r: 5 / V.z, fill: '#ff3b3b' }, g); }
+    if (this.trail.length) this.loop();
+  }
+};
+function drawLaser(g, pts, col) {
+  const d = smoothPath(pts);
+  el('path', { d, fill: 'none', stroke: col, 'stroke-opacity': .25, 'stroke-width': 12 / V.z, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g);
+  el('path', { d, fill: 'none', stroke: col, 'stroke-width': 3.5 / V.z, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, g);
+}
+
+/* =========================================================
+   Text editing
+   ========================================================= */
+let textEdit = null;
+const ta = $('#textEditor');
+function openTextEditor(r, p) {
+  closeEditors();
+  const isNew = !r;
+  if (isNew) r = { id: uid(), k: 'item', del: 0, page: curPage, z: nextZ(), t: 'text', x: rd(p.x), y: rd(p.y - TEXT_SZ[S.size] * .6), text: '', size: TEXT_SZ[S.size], c: S.color };
+  textEdit = { r: clone(r), isNew };
+  const g = elems.get(r.id); if (g) g.setAttribute('opacity', '0');
+  const b = board.getBoundingClientRect();
+  Object.assign(ta.style, { display: 'block', left: (b.left + V.tx + r.x * V.z - 3) + 'px', top: (b.top + V.ty + r.y * V.z - 1) + 'px', fontSize: (r.size * V.z) + 'px', color: color(r.c), minWidth: (40 * V.z) + 'px' });
+  ta.value = r.text; sizeTA();
+  ta.focus(); setTimeout(() => ta.focus(), 0);
+}
+function sizeTA() {
+  ta.style.width = '10px'; ta.style.height = '10px';
+  ta.style.width = (ta.scrollWidth + 8) + 'px'; ta.style.height = (ta.scrollHeight + 2) + 'px';
+}
+ta.addEventListener('input', sizeTA);
+ta.addEventListener('keydown', e => {
+  e.stopPropagation();
+  if (e.key === 'Escape') { closeTextEditor(true); }
+  else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); closeTextEditor(true); }
+});
+ta.addEventListener('blur', () => closeTextEditor(true));
+function closeTextEditor(save) {
+  if (!textEdit) return;
+  const { r, isNew } = textEdit; textEdit = null;
+  ta.blur(); ta.style.display = 'none';
+  const text = ta.value.replace(/\s+$/, '').slice(0, 2000);
+  const g = elems.get(r.id); if (g) g.removeAttribute('opacity');
+  if (!save) return;
+  if (!text) { if (!isNew) commit([Object.assign(clone(recs.get(r.id)), { del: 1 })]); return; }
+  if (!isNew && text === recs.get(r.id)?.text) return;
+  commit([Object.assign(r, { text })]);
+}
+
+/* =========================================================
+   Math editor
+   ========================================================= */
+let mathEdit = null;
+const QUICK = [
+  ['a/b', '\\frac{}{}', 6], ['x²', '^{2}', 4], ['xⁿ', '^{}', 2], ['√', '\\sqrt{}', 6], ['ⁿ√', '\\sqrt[]{}', 6], ['π', '\\pi '],
+  ['θ', '\\theta '], ['≤', '\\le '], ['≥', '\\ge '], ['≠', '\\ne '], ['±', '\\pm '], ['·', '\\cdot '],
+  ['×', '\\times '], ['÷', '\\div '], ['°', '^\\circ '], ['∠', '\\angle '], ['△', '\\triangle '], ['|x|', '\\left|  \\right|', 7],
+  ['∞', '\\infty '], ['Σ', '\\sum_{i=1}^{n} '], ['∫', '\\int_{a}^{b} '], ['log', '\\log_{}', 6], ['sin', '\\sin '], ['{', '\\begin{cases}  \\\\  \\end{cases}', 14],
+];
+(function buildQuick() {
+  const q = $('#mathQuick');
+  for (const [lab, ins, back] of QUICK) {
+    const b = document.createElement('button'); b.textContent = lab; b.title = ins.trim();
+    b.onclick = () => {
+      const i = $('#mathInput'), s = i.selectionStart, e2 = i.selectionEnd;
+      i.value = i.value.slice(0, s) + ins + i.value.slice(e2);
+      const pos = s + (back ? back : ins.length); i.focus(); i.setSelectionRange(pos, pos); mathPreview();
+    };
+    q.appendChild(b);
+  }
+})();
+function openMathEditor(r, p) {
+  closeEditors();
+  const isNew = !r;
+  if (isNew) { const c = p || viewCenter(); r = { id: uid(), k: 'item', del: 0, page: curPage, z: nextZ(), t: 'math', x: rd(c.x), y: rd(c.y), tex: '', size: Math.round(TEXT_SZ[S.size] * 1.1), c: S.color }; }
+  mathEdit = { r: clone(r), isNew };
+  $('#mathInput').value = r.tex;
+  $('#mathOk').textContent = isNew ? 'Insert' : 'Update';
+  $('#mathDelete').style.display = isNew ? 'none' : '';
+  placeEditor($('#mathEditor'), r.x, r.y);
+  $('#mathEditor').classList.add('open');
+  mathPreview();
+  setTimeout(() => $('#mathInput').focus(), 0);
+}
+function mathPreview() {
+  const box = $('#mathPreview'); box.innerHTML = '';
+  const tex = $('#mathInput').value.trim();
+  if (!tex) { box.innerHTML = '<span class="hint" style="margin:0">Preview appears here</span>'; return; }
+  if (!mathReady) { box.innerHTML = '<span class="hint" style="margin:0">Loading math renderer…</span>'; return; }
+  const res = texToSvg(tex);
+  if (!res) { box.innerHTML = '<span class="err">Could not render</span>'; return; }
+  res.node.style.color = '#1d2330';
+  box.appendChild(res.node);
+  if (res.err) { const s = document.createElement('div'); s.className = 'err'; s.textContent = res.err; box.appendChild(s); }
+}
+$('#mathInput').addEventListener('input', mathPreview);
+$('#mathInput').addEventListener('keydown', e => {
+  e.stopPropagation();
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); saveMath(); }
+  if (e.key === 'Escape') closeEditors();
+});
+$('#mathOk').onclick = saveMath;
+$('#mathDelete').onclick = () => { if (mathEdit) { commit([Object.assign(clone(recs.get(mathEdit.r.id)), { del: 1 })]); } closeEditors(); };
+function saveMath() {
+  if (!mathEdit) return;
+  const tex = sanitizeTex($('#mathInput').value.trim()).slice(0, 1500);
+  const { r, isNew } = mathEdit;
+  if (!tex) { if (!isNew) commit([Object.assign(clone(recs.get(r.id)), { del: 1 })]); closeEditors(); return; }
+  commit([Object.assign(r, { tex })]);
+  closeEditors();
+  if (isNew) { selection.clear(); }
+}
+const sanitizeTex = s => s.replace(/\\(href|url|class|style|cssId|data|require|unicode|mmlToken|html)\b/g, '');
+
+/* =========================================================
+   Graph editor
+   ========================================================= */
+let graphEdit = null;
+const FN_COLORS = ['blue', 'red', 'green', 'purple', 'orange', 'ink'];
+function insertGraph() {
+  const c = viewCenter(), w = 380, h = 380;
+  const r = { id: uid(), k: 'item', del: 0, page: curPage, z: nextZ(), t: 'graph', x: rd(c.x - w / 2), y: rd(c.y - h / 2), w, h, xmin: -10, xmax: 10, ymin: -10, ymax: 10, grid: 1, fns: [{ e: '', c: 'blue' }] };
+  commit([r]); setTool('select'); selection.add(r.id); renderSelection(); openGraphEditor(recs.get(r.id));
+}
+function openGraphEditor(r) {
+  closeEditors();
+  graphEdit = { r: clone(r), orig: clone(r) };
+  if (!graphEdit.r.fns || !graphEdit.r.fns.length) graphEdit.r.fns = [{ e: '', c: 'blue' }];
+  for (const k of ['xmin', 'xmax', 'ymin', 'ymax']) $('#g' + k).value = r[k];
+  $('#gGrid').checked = r.grid !== 0;
+  buildFnRows();
+  const b = bbox(r.id); placeEditor($('#graphEditor'), b ? b.x + b.w : r.x + r.w, r.y, true);
+  $('#graphEditor').classList.add('open');
+  setTimeout(() => { const i = $('#fnRows input'); if (i) i.focus(); }, 0);
+}
+function buildFnRows() {
+  const box = $('#fnRows'); box.innerHTML = '';
+  graphEdit.r.fns.forEach((f, i) => {
+    const row = document.createElement('div'); row.className = 'fnrow';
+    const dot = document.createElement('button'); dot.className = 'cdot'; dot.style.background = COLORS[f.c][0]; dot.title = 'Change color';
+    dot.onclick = () => { f.c = FN_COLORS[(FN_COLORS.indexOf(f.c) + 1) % FN_COLORS.length]; dot.style.background = COLORS[f.c][0]; previewGraph(); };
+    const inp = document.createElement('input'); inp.className = 'field'; inp.value = f.e; inp.placeholder = i === 0 ? 'y = 2x + 1' : 'Another function or (x, y)';
+    inp.spellcheck = false;
+    const mark = () => { const p = f.e.trim() ? parseFn(f.e) : null; inp.classList.toggle('bad', !!(p && p.kind === 'bad')); };
+    inp.oninput = () => { f.e = inp.value.slice(0, 200); mark(); previewGraph(); };
+    inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') { if (i === graphEdit.r.fns.length - 1 && f.e.trim()) addFnRow(); else closeEditors(); } if (e.key === 'Escape') closeEditors(); };
+    const x = document.createElement('button'); x.className = 'ibtn'; x.textContent = '✕'; x.title = 'Remove';
+    x.onclick = () => { graphEdit.r.fns.splice(i, 1); if (!graphEdit.r.fns.length) graphEdit.r.fns.push({ e: '', c: 'blue' }); buildFnRows(); previewGraph(); };
+    row.append(dot, inp, x); box.appendChild(row); mark();
+  });
+}
+function addFnRow() {
+  if (graphEdit.r.fns.length >= 8) return;
+  graphEdit.r.fns.push({ e: '', c: FN_COLORS[graphEdit.r.fns.length % FN_COLORS.length] });
+  buildFnRows(); const ins = $$('#fnRows input'); ins[ins.length - 1].focus();
+}
+$('#addFn').onclick = addFnRow;
+function previewGraph() { if (!graphEdit) return; renderItem(graphEdit.r); bbCache.delete(graphEdit.r.id); renderSelection(); }
+for (const k of ['xmin', 'xmax', 'ymin', 'ymax']) {
+  const i = $('#g' + k);
+  i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') closeEditors(); });
+  i.addEventListener('input', () => { const v = parseFloat(i.value); if (isFinite(v)) { graphEdit.r[k] = v; previewGraph(); } });
+}
+$('#gGrid').onchange = () => { graphEdit.r.grid = $('#gGrid').checked ? 1 : 0; previewGraph(); };
+$$('[data-range]').forEach(b => b.onclick = () => {
+  const r = graphEdit.r, m = b.dataset.range;
+  if (m === 'std') Object.assign(r, { xmin: -10, xmax: 10, ymin: -10, ymax: 10 });
+  if (m === 'q1') Object.assign(r, { xmin: -1, xmax: 10, ymin: -1, ymax: 10 });
+  if (m === 'trig') Object.assign(r, { xmin: -7, xmax: 7, ymin: -2.5, ymax: 2.5 });
+  if (m === 'square') { const cy = (r.ymin + r.ymax) / 2, half = (r.xmax - r.xmin) * r.h / r.w / 2; r.ymin = rd(cy - half); r.ymax = rd(cy + half); }
+  for (const k of ['xmin', 'xmax', 'ymin', 'ymax']) $('#g' + k).value = r[k];
+  previewGraph();
+});
+$('#graphDelete').onclick = () => { const id = graphEdit.r.id; graphEdit = null; commit([Object.assign(clone(recs.get(id)), { del: 1 })]); closeEditors(); };
+function finishGraph() {
+  if (!graphEdit) return; const g = graphEdit; graphEdit = null;
+  g.r.fns = g.r.fns.filter((f, i) => f.e.trim() || i === 0);
+  if (!(g.r.xmax > g.r.xmin)) { g.r.xmin = g.orig.xmin; g.r.xmax = g.orig.xmax; }
+  if (!(g.r.ymax > g.r.ymin)) { g.r.ymin = g.orig.ymin; g.r.ymax = g.orig.ymax; }
+  if (JSON.stringify(g.r) !== JSON.stringify(g.orig) && recs.get(g.r.id) && !recs.get(g.r.id).del) commit([g.r]);
+  else if (recs.get(g.r.id)) renderItem(recs.get(g.r.id));
+}
+
+/* ---------- number line editor ---------- */
+let numEdit = null;
+function insertNumline() {
+  const c = viewCenter(), w = 520;
+  const r = { id: uid(), k: 'item', del: 0, page: curPage, z: nextZ(), t: 'numline', x: rd(c.x - w / 2), y: rd(c.y), w, min: -5, max: 5, step: 1, marks: '', c: S.color };
+  commit([r]); setTool('select'); selection.add(r.id); renderSelection(); openNumEditor(recs.get(r.id));
+}
+function openNumEditor(r) {
+  closeEditors();
+  numEdit = { r: clone(r), orig: clone(r) };
+  $('#nmin').value = r.min; $('#nmax').value = r.max; $('#nstep').value = r.step; $('#nmarks').value = r.marks || '';
+  const b = bbox(r.id); placeEditor($('#numEditor'), b ? b.x + b.w / 2 - 170 / V.z : r.x, (b ? b.y + b.h : r.y) + 20 / V.z);
+  $('#numEditor').classList.add('open');
+}
+for (const k of ['nmin', 'nmax', 'nstep', 'nmarks']) {
+  const i = $('#' + k);
+  i.addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter' || e.key === 'Escape') closeEditors(); });
+  i.addEventListener('input', () => {
+    const r = numEdit.r;
+    if (k === 'nmarks') r.marks = i.value.slice(0, 200);
+    else { const v = parseFloat(i.value); if (!isFinite(v)) return; r[{ nmin: 'min', nmax: 'max', nstep: 'step' }[k]] = v; }
+    renderItem(r); bbCache.delete(r.id); renderSelection();
+  });
+}
+$('#numDelete').onclick = () => { const id = numEdit.r.id; numEdit = null; commit([Object.assign(clone(recs.get(id)), { del: 1 })]); closeEditors(); };
+function finishNum() {
+  if (!numEdit) return; const n = numEdit; numEdit = null;
+  if (!(n.r.max > n.r.min) || !(Math.abs(n.r.step) > 0) || (n.r.max - n.r.min) / Math.abs(n.r.step) > 200) { n.r.min = n.orig.min; n.r.max = n.orig.max; n.r.step = n.orig.step; }
+  if (JSON.stringify(n.r) !== JSON.stringify(n.orig) && recs.get(n.r.id) && !recs.get(n.r.id).del) commit([n.r]);
+  else if (recs.get(n.r.id)) renderItem(recs.get(n.r.id));
+}
+
+function placeEditor(ed, wx, wy, right) {
+  const b = board.getBoundingClientRect();
+  ed.style.visibility = 'hidden'; ed.classList.add('open');
+  const w = ed.offsetWidth, h = ed.offsetHeight; ed.classList.remove('open'); ed.style.visibility = '';
+  let x = b.left + V.tx + wx * V.z + (right ? 16 : 0), y = b.top + V.ty + wy * V.z + (right ? 0 : 24);
+  if (x + w > innerWidth - 10) x = right ? Math.max(70, b.left + V.tx + wx * V.z - w - 16 - 400 * V.z) : innerWidth - w - 10;
+  if (x + w > innerWidth - 10) x = innerWidth - w - 10;
+  x = Math.max(62, x); y = clamp(y, 64, Math.max(64, innerHeight - h - 70));
+  ed.style.left = x + 'px'; ed.style.top = y + 'px';
+}
+function closeEditors() {
+  if (mathEdit) { mathEdit = null; }
+  finishGraph(); finishNum();
+  const ae = document.activeElement; if (ae && ae.closest && ae.closest('.editor')) ae.blur();
+  $$('.editor').forEach(e => e.classList.remove('open'));
+}
+$$('.editor [data-close]').forEach(b => b.onclick = closeEditors);
+
+/* =========================================================
+   Images
+   ========================================================= */
+const LOCAL_IMG = {};
+
+/* =========================================================
+   PDF import (pages become images you can write on)
+   ========================================================= */
+const PDFJS_LIB = window.MB_PDFJS_LIB || 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js';
+const PDFJS_WORKER = window.MB_PDFJS_WORKER || 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js';
+let pdfjsP = null;
+function loadPdfJs() {
+  if (pdfjsP) return pdfjsP;
+  pdfjsP = new Promise((res, rej) => {
+    if (window.pdfjsLib) return res(window.pdfjsLib);
+    const s = document.createElement('script'); s.src = PDFJS_LIB;
+    s.onload = () => {
+      const L = window.pdfjsLib; if (!L) { pdfjsP = null; return rej(new Error('pdfjs')); }
+      try { L.GlobalWorkerOptions.workerPort = new Worker(URL.createObjectURL(new Blob([`importScripts(${JSON.stringify(PDFJS_WORKER)});`], { type: 'text/javascript' }))); }
+      catch { L.GlobalWorkerOptions.workerSrc = PDFJS_WORKER; }
+      res(L);
+    };
+    s.onerror = () => { pdfjsP = null; rej(new Error('pdfjs')); };
+    document.head.appendChild(s);
+  });
+  return pdfjsP;
+}
+const isPdf = f => f && (f.type === 'application/pdf' || /\.pdf$/i.test(f.name || ''));
+function choose(title, msg, options) {
+  return new Promise(res => {
+    const m = $('#modal'); m.innerHTML = '';
+    const h = document.createElement('h3'); h.textContent = title;
+    const p = document.createElement('p'); p.textContent = msg;
+    const row = document.createElement('div'); row.className = 'row'; row.style.flexWrap = 'wrap';
+    const done = v => { $('#modalWrap').classList.remove('open'); res(v); };
+    const c = document.createElement('button'); c.className = 'btn'; c.textContent = 'Cancel'; c.onclick = () => done(null); row.appendChild(c);
+    options.forEach(([val, label], i) => { const b = document.createElement('button'); b.className = 'btn' + (i === 0 ? ' primary' : ''); b.textContent = label; b.onclick = () => done(val); row.appendChild(b); });
+    m.append(h, p, row); $('#modalWrap').classList.add('open');
+  });
+}
+let importingPdf = false;
+function pdfPicker(doc, fname) {
+  return new Promise(res => {
+    const total = doc.numPages, LIMIT = 60;
+    const picked = new Set(); for (let i = 1; i <= Math.min(total, LIMIT); i++) picked.add(i);
+    const m = $('#modal'); m.innerHTML = ''; m.classList.add('wide');
+    const h = document.createElement('h3'); h.textContent = 'Choose pages to add';
+    const sub = document.createElement('p'); sub.style.marginBottom = '10px';
+    const tools = document.createElement('div'); tools.className = 'row'; tools.style.marginBottom = '10px';
+    const all = document.createElement('button'); all.className = 'mini'; all.textContent = 'Select all';
+    const none = document.createElement('button'); none.className = 'mini'; none.textContent = 'Select none';
+    const count = document.createElement('span'); count.className = 'hint'; count.style.margin = '0 0 0 auto';
+    tools.append(all, none, count);
+    const grid = document.createElement('div'); grid.className = 'pdfgrid';
+    const er = document.createElement('label'); er.className = 'pdfopt';
+    const cb = document.createElement('input'); cb.type = 'checkbox';
+    er.append(cb, ' Let the eraser remove these pages (you can change this later per page)');
+    const row = document.createElement('div'); row.className = 'row'; row.style.marginTop = '12px';
+    const cancel = document.createElement('button'); cancel.className = 'btn'; cancel.textContent = 'Cancel';
+    const ok = document.createElement('button'); ok.className = 'btn primary';
+    row.append(cancel, ok);
+    m.append(h, sub, tools, grid, er, row);
+    let alive = true;
+    const tiles = [];
+    const update = () => {
+      tiles.forEach((t, i) => t.classList.toggle('on', picked.has(i + 1)));
+      count.textContent = `${picked.size} of ${total} selected`;
+      ok.textContent = picked.size ? `Add ${picked.size} page${picked.size === 1 ? '' : 's'}` : 'Add pages';
+      ok.disabled = !picked.size; ok.style.opacity = picked.size ? '' : '.5';
+    };
+    sub.textContent = `${fname ? fname + ' — ' : ''}${total} page${total === 1 ? '' : 's'}. Each page you pick goes on its own board page.` + (total > LIMIT ? ` You can add up to ${LIMIT} at a time.` : '');
+    for (let i = 1; i <= total; i++) {
+      const t = document.createElement('button'); t.className = 'pdftile';
+      const ph = document.createElement('div'); ph.className = 'ph';
+      const lab = document.createElement('span'); lab.textContent = i;
+      const ck = document.createElement('i'); ck.textContent = '✓';
+      t.append(ph, lab, ck);
+      t.onclick = e => {
+        if (picked.has(i)) picked.delete(i); else { if (picked.size >= LIMIT) { toast(`You can add up to ${LIMIT} pages at a time.`); return; } picked.add(i); }
+        update();
+      };
+      grid.appendChild(t); tiles.push(t);
+    }
+    all.onclick = () => { picked.clear(); for (let i = 1; i <= Math.min(total, LIMIT); i++) picked.add(i); update(); };
+    none.onclick = () => { picked.clear(); update(); };
+    const done = v => { alive = false; $('#modalWrap').classList.remove('open'); m.classList.remove('wide'); res(v); };
+    cancel.onclick = () => done(null);
+    ok.onclick = () => { if (picked.size) done({ pages: [...picked].sort((a, b) => a - b), erasable: cb.checked }); };
+    update();
+    $('#modalWrap').classList.add('open');
+    (async () => {
+      for (let i = 1; i <= total && alive; i++) {
+        try {
+          const page = await doc.getPage(i), v1 = page.getViewport({ scale: 1 }), vp = page.getViewport({ scale: 220 / v1.width });
+          const cv = document.createElement('canvas'); cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+          const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+          await page.render({ canvasContext: ctx, viewport: vp }).promise;
+          if (!alive) return;
+          const ph = tiles[i - 1].querySelector('.ph'); ph.replaceWith(cv);
+        } catch {}
+      }
+    })();
+  });
+}
+async function importPdf(file) {
+  if (importingPdf) return toast('Still importing the last PDF…');
+  importingPdf = true;
+  try {
+    toast('Opening PDF…', 20000);
+    let L; try { L = await loadPdfJs(); } catch { toast('Couldn’t load the PDF reader — check your internet connection.', 4000); return; }
+    let doc;
+    try { doc = await L.getDocument({ data: new Uint8Array(await file.arrayBuffer()), isEvalSupported: false }).promise; }
+    catch (e) { toast(e && e.name === 'PasswordException' ? 'That PDF is password-protected, so it can’t be opened here.' : 'Couldn’t open that PDF.', 4000); return; }
+    $('#toast').classList.remove('show');
+    const fname = String(file.name || 'PDF').replace(/\.pdf$/i, '').slice(0, 60);
+    const choice = await pdfPicker(doc, fname);
+    if (!choice) { doc.destroy(); return; }
+    const shots = [];
+    for (let k = 0; k < choice.pages.length; k++) {
+      const n = choice.pages[k];
+      toast(`Adding page ${k + 1} of ${choice.pages.length}…`, 20000);
+      const page = await doc.getPage(n);
+      const v1 = page.getViewport({ scale: 1 }), scale = clamp(1500 / v1.width, .5, 2.5), vp = page.getViewport({ scale });
+      const cv = document.createElement('canvas'); cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+      const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
+      await page.render({ canvasContext: ctx, viewport: vp }).promise;
+      shots.push({ src: cv.toDataURL('image/jpeg', .82), ar: cv.height / cv.width, pn: n });
+      page.cleanup();
+    }
+    doc.destroy();
+    const W = 760, list = [];
+    const ps = pages(), idx = ps.findIndex(p => p.id === curPage);
+    const a = ps[idx] ? ps[idx].z : 0, b = ps[idx + 1] ? ps[idx + 1].z : a + 2000;
+    const useCurrent = !elems.size, newCount = shots.length - (useCurrent ? 1 : 0);
+    let k = 0, firstPage = curPage;
+    shots.forEach((s, j) => {
+      let pid = curPage;
+      const ph = Math.round(W * s.ar);
+      if (!(useCurrent && j === 0)) { pid = 'p' + uid(); list.push({ id: pid, k: 'page', del: 0, z: a + (b - a) * (++k) / (newCount + 1), w: W, h: ph }); }
+      else list.push(Object.assign(clone(recs.get(curPage)), { w: W, h: ph }));
+      if (j === 0) firstPage = pid;
+      const r = { id: uid(), k: 'item', del: 0, page: pid, z: nextZ(), t: 'image', x: 0, y: 0, w: W, h: rd(W * s.ar), src: s.src, pn: s.pn, fn: fname, ...LOCAL_IMG };
+      if (choice.erasable) r.er = 1;
+      list.push(r);
+    });
+    commit(list);
+    $('#toast').classList.remove('show');
+    if (firstPage !== curPage) goPage(firstPage);
+    setTool('pen'); fitContent();
+    toast(shots.length > 1 ? `Added ${shots.length} pages — click the page number at the top to jump between them.` : 'Page added — write on it with the pen.', 4500);
+    if (LOCAL_IMG.local && typeof Live !== 'undefined' && Live.others().length) setTimeout(() => toast('PDF pages stay on your screen only — they aren’t sent to others in the session.', 4500), 4600);
+  } catch (e) { toast('Something went wrong importing that PDF.', 4000); }
+  finally { importingPdf = false; }
+}
+
+function insertImageFile(file, at) {
+  if (isPdf(file)) return importPdf(file);
+  if (!file || !/^image\//.test(file.type)) { if (file) toast('That file type isn’t supported — use an image or a PDF.'); return; }
+  const fr = new FileReader();
+  fr.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const max = 1600, k = Math.min(1, max / Math.max(img.width, img.height));
+      const cw = Math.max(1, Math.round(img.width * k)), ch = Math.max(1, Math.round(img.height * k));
+      const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
+      cv.getContext('2d').drawImage(img, 0, 0, cw, ch);
+      const src = file.type === 'image/png' && cw * ch < 700000 ? cv.toDataURL('image/png') : cv.toDataURL('image/jpeg', .86);
+      const c = at || viewCenter(), sz = sheet(); let dw = Math.min(560, cw, sz.w * .8), dh = dw * ch / cw; if (dh > sz.h * .8) { dh = sz.h * .8; dw = dh * cw / ch; }
+      const r = { id: uid(), k: 'item', del: 0, page: curPage, z: nextZ(), t: 'image', x: rd(c.x - dw / 2), y: rd(c.y - dh / 2), w: rd(dw), h: rd(dh) , src };
+      commit([r]); setTool('select'); selection.add(r.id); renderSelection();
+    };
+    img.src = fr.result;
+  };
+  fr.readAsDataURL(file);
+}
+$('#imgFile').onchange = e => { insertImageFile(e.target.files[0]); e.target.value = ''; };
+let dragDepth = 0;
+const hasFiles = e => e.dataTransfer && [...(e.dataTransfer.types || [])].includes('Files');
+window.addEventListener('dragenter', e => { if (!hasFiles(e)) return; e.preventDefault(); dragDepth++; $('#dropZone').classList.add('show'); });
+window.addEventListener('dragover', e => { if (!hasFiles(e)) return; e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; });
+window.addEventListener('dragleave', e => { if (!hasFiles(e)) return; dragDepth = Math.max(0, dragDepth - 1); if (!dragDepth) $('#dropZone').classList.remove('show'); });
+window.addEventListener('drop', e => {
+  if (!hasFiles(e)) return; e.preventDefault(); dragDepth = 0; $('#dropZone').classList.remove('show');
+  const files = [...e.dataTransfer.files]; const f = files.find(isPdf);
+  if (f) importPdf(f); else if (files.length) toast('Drop a PDF file to add its pages.');
+});
+document.addEventListener('paste', e => {
+  if (document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
+  const items = e.clipboardData ? [...e.clipboardData.items] : [];
+  const pdf = items.find(i => i.type === 'application/pdf');
+  if (pdf) { e.preventDefault(); importPdf(pdf.getAsFile()); return; }
+  if (clipboardItems.length) { e.preventDefault(); pasteItems(); }
+});
+
+/* =========================================================
+   Copy / duplicate / delete / recolor
+   ========================================================= */
+let clipboardItems = [];
+function copySel() { clipboardItems = [...selection].map(id => clone(recs.get(id))).filter(Boolean); }
+function pasteItems(off = 24) {
+  if (!clipboardItems.length) return;
+  const list = clipboardItems.map(r => { const n = translated(r, off, off); n.id = uid(); n.page = curPage; n.z = nextZ(); delete n.v; delete n.a; return n; });
+  commit(list); clipboardItems = list.map(clone);
+  setTool('select'); selection.clear(); list.forEach(r => selection.add(r.id)); renderSelection();
+}
+function deleteSel() { if (!selection.size) return; commit([...selection].map(id => Object.assign(clone(recs.get(id)), { del: 1 }))); clearSelection(); }
+function restyleSel(prop, val) {
+  if (!selection.size) return false;
+  const list = [];
+  for (const id of selection) {
+    const r = clone(recs.get(id)); if (!r) continue;
+    if (prop === 'c') { if (r.t === 'image' || r.t === 'graph') continue; r.c = val; }
+    else if (prop === 'size') {
+      if (r.t === 'stroke') r.w = (r.hl ? HL_W : PEN_W)[val];
+      else if ('x1' in r) r.w = SHAPE_W[val];
+      else if (r.t === 'text') r.size = TEXT_SZ[val];
+      else if (r.t === 'math') r.size = Math.round(TEXT_SZ[val] * 1.1);
+      else continue;
+    }
+    list.push(r);
+  }
+  commit(list); return true;
+}
+
+/* =========================================================
+   Style bar
+   ========================================================= */
+const GRID_COLORS = (() => {
+  const hx = (h, s2, l) => { s2 /= 100; l /= 100; const k = n => (n + h / 30) % 12, a = s2 * Math.min(l, 1 - l), f = n => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1)); return '#' + [f(0), f(8), f(4)].map(x => Math.round(x * 255).toString(16).padStart(2, '0')).join(''); };
+  const rows = [];
+  rows.push(Array.from({ length: 12 }, (_, i) => hx(0, 0, 100 - i * (100 / 11))));
+  const hues = [198, 222, 250, 276, 332, 6, 20, 34, 45, 57, 70, 96];
+  const L = [14, 21, 30, 40, 50, 60, 70, 80, 88, 94];
+  const S = [70, 75, 80, 80, 82, 88, 90, 90, 92, 95];
+  L.forEach((l, i) => rows.push(hues.map(h => hx(h, S[i] - (h > 40 && h < 75 && l < 45 ? 15 : 0), l))));
+  return rows.flat();
+})();
+function openColorGrid(anchor, hl, pick) {
+  const pop = $('#gridPop'); if (pop.classList.contains('open')) { pop.classList.remove('open'); return; }
+  const key = hl ? 'mb.customHl' : 'mb.customPen', cur = hl ? S.hl : S.color;
+  const g = $('#cgrid'); g.innerHTML = '';
+  const choose = c => { store.set(key, [c, ...store.get(key, []).filter(x => x !== c && isHex(x))].slice(0, 6)); pop.classList.remove('open'); pick(c); };
+  for (const c of GRID_COLORS) { const b = document.createElement('button'); b.style.background = c; b.title = c; if (c === cur) b.className = 'on'; b.onclick = () => choose(c); g.appendChild(b); }
+  const rc = $('#crecent'); rc.innerHTML = '';
+  const recent = store.get(key, []).filter(isHex);
+  if (recent.length) { rc.append('Recent'); for (const c of recent) { const b = document.createElement('button'); b.style.background = c; b.title = c; b.onclick = () => choose(c); rc.appendChild(b); } }
+  closePops(); pop.classList.add('open');
+  const r = $('#stylebar').getBoundingClientRect();
+  pop.style.left = clamp(r.left + r.width / 2 - pop.offsetWidth / 2, 8, innerWidth - pop.offsetWidth - 8) + 'px';
+  pop.style.top = Math.max(8, r.top - pop.offsetHeight - 10) + 'px';
+}
+function updateStylebar() {
+  const sb = $('#stylebar'), t = S.tool;
+  const show = !S.styleHidden && ['pen', 'hl', 'eraser'].includes(t);
+  sb.classList.toggle('hidden', !show);
+  if (!show) return;
+  const hl = t === 'hl';
+  const sw = $('#swatches'); sw.innerHTML = ''; 
+  const er = t === 'eraser'; sw.classList.toggle('off', er); $('#stylebar .sep').classList.toggle('off', er);
+  const cur = hl ? S.hl : S.color;
+  const pick = c => { if (t === 'select') { restyleSel('c', c); S.color = c; } else if (hl) S.hl = c; else S.color = c; updateStylebar(); };
+  for (const c of (hl ? HL_COLORS : PEN_COLORS)) {
+    const b = document.createElement('button'); b.className = 'sw' + (cur === c ? ' on' : '');
+    b.innerHTML = `<i style="background:${color(c)}"></i>`; b.title = isHex(c) ? c : c[0].toUpperCase() + c.slice(1);
+    b.onclick = () => pick(c);
+    sw.appendChild(b);
+  }
+  const cb = document.createElement('button'); cb.className = 'sw wheel' + (isHex(cur) ? ' on' : ''); cb.title = 'More colors';
+  cb.innerHTML = isHex(cur) ? `<i style="background:${cur}"></i>` : '<i></i>';
+  cb.onclick = () => openColorGrid(cb, hl, pick);
+  sw.appendChild(cb);
+
+  const sz = $('#sizes'); sz.innerHTML = '';
+  const ers = t === 'eraser';
+  (ers ? [5, 9, 13, 18, 24] : [5, 8, 12, 16, 21]).forEach((px, i) => {
+    const b = document.createElement('button'); b.className = 'sz' + ((ers ? S.esize : S.size) === i ? ' on' : ''); b.title = (ers ? ['Small eraser', 'Medium eraser', 'Large eraser', 'Huge eraser', 'Giant eraser'] : ['Fine', 'Medium', 'Bold', 'Extra bold', 'Huge'])[i] + ` (${i + 1})`;
+    b.innerHTML = ers ? `<i style="width:${px}px;height:${px}px;background:none;border:1.6px solid var(--text)"></i>` : `<i style="width:${px}px;height:${px}px"></i>`;
+    b.onclick = () => { if (ers) { S.esize = i; } else { S.size = i; if (t === 'select') restyleSel('size', i); } updateStylebar(); };
+    sz.appendChild(b);
+  });
+}
+
+/* =========================================================
+   Shapes flyout, tooltips, buttons
+   ========================================================= */
+const SHAPES = [
+  ['line', 'Line', 'L', '<path d="M5 19L19 5"/>'],
+  ['arrow', 'Arrow', 'A', '<path d="M5 19L19 5M10 5h9v9"/>'],
+  ['rect', 'Rectangle', 'R', '<rect x="4" y="6" width="16" height="12" rx="1.5"/>'],
+  ['ellipse', 'Ellipse / circle', 'O', '<ellipse cx="12" cy="12" rx="8.5" ry="7"/>'],
+  ['tri', 'Triangle', '', '<path d="M12 4.5l8.5 15h-17z"/>'],
+  ['rtri', 'Right triangle', '', '<path d="M5 4.5v15h14.5z"/><path d="M5 15.5h4v4" stroke-width="1.4"/>'],
+  ['axes', 'Quick x/y axes', '', '<path d="M3 12h18M12 21V3M18 9l3 3-3 3M9 6l3-3 3 3"/>'],
+];
+const shapeSvg = s => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">${SHAPES.find(x => x[0] === s)[3]}</svg>`;
+(function buildShapes() {
+  const fly = $('#shapeFly');
+  for (const [id, name, key] of SHAPES) {
+    const b = document.createElement('button'); b.className = 'tbtn'; b.innerHTML = shapeSvg(id);
+    b.dataset.tip = name; if (key) b.dataset.key = key; b.dataset.shape = id;
+    b.onclick = () => chooseShape(id);
+    fly.appendChild(b);
+  }
+  $('#shapeIcon').innerHTML = shapeSvg(S.shape);
+})();
+function chooseShape(id) {
+  S.shape = id; $('#shapeIcon').innerHTML = shapeSvg(id); setTool('shape');
+  $$('#shapeFly .tbtn').forEach(b => b.classList.toggle('on', b.dataset.shape === id));
+}
+$$('#toolbar .tbtn[data-tool]').forEach(b => b.addEventListener('click', () => {
+  if (b.dataset.tool === 'shape') {
+    const open = $('#shapeFly').classList.contains('open') || S.tool !== 'shape';
+    setTool('shape');
+    if (open) { const r = b.getBoundingClientRect(), f = $('#shapeFly'); f.classList.add('open'); f.style.left = clamp(r.left + r.width / 2 - f.offsetWidth / 2, 8, innerWidth - f.offsetWidth - 8) + 'px'; f.style.top = (r.top - f.offsetHeight - 10) + 'px'; $$('#shapeFly .tbtn').forEach(x => x.classList.toggle('on', x.dataset.shape === S.shape)); }
+  } else if (b.dataset.tool === S.tool && ['pen', 'hl', 'eraser'].includes(S.tool)) { S.styleHidden = !S.styleHidden; closePops(); updateStylebar(); }
+  else setTool(b.dataset.tool);
+}));
+
+$('#selTrash').addEventListener('pointerdown', e => e.stopPropagation());
+$('#selTrash').onclick = () => { deleteSel(); updateStylebar(); };
+$('#eraseLockBtn').onclick = () => {
+  const imgs = [...selection].map(id => recs.get(id)).filter(r => r && r.t === 'image'); if (!imgs.length) return;
+  const make = !imgs.every(r => r.er);
+  commit(imgs.map(r => { const n = clone(r); if (make) n.er = 1; else delete n.er; return n; }));
+  toast(make ? 'The eraser can now remove this page image.' : 'Protected — the eraser won’t remove it.');
+};
+
+
+const tip = $('#tip');
+document.addEventListener('pointerover', e => {
+  const t = e.target.closest && e.target.closest('[data-tip]');
+  if (!t || e.pointerType === 'touch') { tip.style.opacity = 0; return; }
+  tip.innerHTML = ''; tip.append(t.dataset.tip);
+  if (t.dataset.key) { const k = document.createElement('kbd'); k.textContent = t.dataset.key; tip.appendChild(k); }
+  const r = t.getBoundingClientRect(); tip.style.opacity = 1;
+  const vertical = t.closest('#toolbar,#shapeFly');
+  { tip.style.left = clamp(r.left + r.width / 2 - tip.offsetWidth / 2, 6, innerWidth - tip.offsetWidth - 6) + 'px'; tip.style.top = (r.bottom + 8 > innerHeight - 40 ? r.top - 34 : r.bottom + 8) + 'px'; }
+});
+document.addEventListener('pointerdown', () => tip.style.opacity = 0, true);
+
+$('#undoBtn').onclick = undo; $('#redoBtn').onclick = redo;
+$('#prevPage').onclick = () => stepPage(-1); $('#nextPage').onclick = () => stepPage(1);
+$('#addPage').onclick = () => addPage(false);
+$('#zoomIn').onclick = () => zoomAt(1.25); $('#zoomOut').onclick = () => zoomAt(.8);
+$('#zoomLabel').onclick = () => zoomAt(1 / V.z); $('#zoomFit').onclick = fitContent;
+
+/* ---------- popovers ---------- */
+function openPop(pop, anchor, alignRight) {
+  const was = pop.classList.contains('open'); closePops(); if (was) return;
+  pop.classList.add('open');
+  const r = anchor.getBoundingClientRect();
+  let x = alignRight ? r.right - pop.offsetWidth : r.left;
+  pop.style.left = clamp(x, 8, innerWidth - pop.offsetWidth - 8) + 'px'; pop.style.top = (r.bottom + 8) + 'px';
+}
+function closePops() { $$('.pop').forEach(p => p.classList.remove('open')); $('#shapeFly').classList.remove('open'); }
+document.addEventListener('pointerdown', e => {
+  if (!e.target.closest('.pop,.sw.wheel,#menuBtn,#pageLabel,#timerChip,#liveChip,#boardChip,#shapeFly,#shapeBtn,#modalWrap')) closePops();
+}, true);
+$('#menuBtn').onclick = () => { buildMenuChips(); openPop($('#menuPop'), $('#menuBtn')); };
+$('#pageLabel').onclick = () => { buildPageList(); openPop($('#pagePop'), $('#pageLabel')); if ($('#pagePop').classList.contains('open')) setTimeout(() => { $('#pageJump').focus(); $('#pageJump').select(); }, 0); };
+$('#pageJump').addEventListener('keydown', e => {
+  e.stopPropagation();
+  if (e.key === 'Enter') { const ps = pages(), n = parseInt(e.target.value, 10); if (n >= 1 && n <= ps.length) { closePops(); goPage(ps[n - 1].id); } else toast(`Pick a page from 1 to ${ps.length}`); }
+  if (e.key === 'Escape') closePops();
+});
+$('#boardChip').onclick = () => { renderStudentsPop(); openPop($('#studentsPop'), $('#boardChip')); };
+
+function buildMenuChips() {
+  const bc = $('#bgChips'); bc.innerHTML = '';
+  for (const k in BGS) { const b = document.createElement('button'); b.className = 'chip' + (S.bg === k ? ' on' : ''); b.textContent = BGS[k]; b.onclick = () => { S.bg = k; store.set('mb.bg', k); buildPatterns(); buildMenuChips(); }; bc.appendChild(b); }
+  const tc = $('#themeChips'); tc.innerHTML = '';
+  for (const k in THEMES) { const b = document.createElement('button'); b.className = 'chip' + (S.theme === k ? ' on' : ''); b.textContent = THEMES[k].name; b.onclick = () => { S.theme = k; store.set('mb.theme', k); buildPatterns(); renderPage(); updateStylebar(); buildMenuChips(); }; tc.appendChild(b); }
+}
+function buildSheetChips() {
+  const box = $('#sheetChips'); if (!box) return; box.innerHTML = '';
+  const cur = sheet(), hasPdf = pageItems().some(r => r.t === 'image' && r.pn);
+  const scr = screenSheet(); SHEETS.screen = [scr.w, scr.h];
+  for (const [k, lab] of [['screen', 'Fit my screen'], ['landscape', 'Landscape'], ['portrait', 'Portrait'], ['tall', 'Tall (scrolls down)']]) {
+    const [w, h] = SHEETS[k];
+    const b = document.createElement('button'); b.className = 'chip' + (cur.w === w && cur.h === h ? ' on' : ''); b.textContent = lab;
+    b.onclick = () => { const p = recs.get(curPage); if (!p) return; commit([Object.assign(clone(p), { w, h })]); delete views[curPage]; V = defaultView(); applySheet(); applyView(true); buildSheetChips(); };
+    box.appendChild(b);
+  }
+  if (hasPdf) { const n = document.createElement('div'); n.className = 'hint'; n.style.cssText = 'margin:0;padding:0 4px;width:100%'; n.textContent = 'This page is sized to its PDF page.'; box.appendChild(n); }
+}
+function buildPageList() {
+  buildSheetChips();
+  const box = $('#pageList'); box.innerHTML = '';
+  const ps = pages();
+  $('#pageJump').max = ps.length; $('#pageJump').value = ps.findIndex(p => p.id === curPage) + 1;
+  $('#pageJumpOf').textContent = 'of ' + ps.length;
+  ps.forEach((p, i) => {
+    const its = pageItems(p.id), n = its.length, pdf = its.find(r => r.t === 'image' && r.pn);
+    const b = document.createElement('button'); b.className = 'menu-item' + (p.id === curPage ? ' on' : '');
+    const bb = document.createElement('b'); bb.style.minWidth = '52px'; bb.textContent = 'Page ' + (i + 1);
+    const k = document.createElement('span'); k.className = 'k'; k.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px';
+    k.textContent = pdf ? `${pdf.fn || 'PDF'} · p.${pdf.pn}` : `${n} item${n === 1 ? '' : 's'}`;
+    b.append(bb, k);
+    if (p.id === curPage) b.style.background = 'var(--accent-soft)';
+    b.onclick = () => { closePops(); goPage(p.id); };
+    box.appendChild(b);
+  });
+}
+$('#menuPop').addEventListener('click', async e => {
+  const a = e.target.closest('[data-act]'); if (!a) return; closePops();
+  const act = a.dataset.act;
+  if (act === 'importpdf') $('#imgFile').click();
+  if (act === 'exportpdf') exportBoardPDF();
+  if (act === 'save') saveBoardFile();
+  if (act === 'open') $('#boardFile').click();
+  if (act === 'help') showHelp();
+  if (act === 'clearpage') {
+    if (!elems.size) return toast('This page is already empty.');
+    if (await ask('Clear this page?', 'Everything on this page will be removed. You can undo this.', 'Clear page')) { commit(pageItems().map(r => Object.assign(clone(r), { del: 1 }))); clearSelection(); }
+  }
+  if (act === 'newboard') {
+    if (await ask('Start a fresh board?', 'All pages will be cleared' + (Live.others().length ? ' for everyone in the session' : '') + '. Download it as a PDF first if you want a copy.', 'Start fresh', true)) newBoard();
+  }
+});
+$('#pagePop').addEventListener('click', async e => {
+  const a = e.target.closest('[data-act]'); if (!a) return; closePops();
+  if (a.dataset.act === 'dupPage') addPage(true);
+  if (a.dataset.act === 'delPage') {
+    if (pages().length <= 1) { if (elems.size && await ask('Clear this page?', 'It’s the only page, so it will be cleared instead. You can undo this.', 'Clear page')) commit(pageItems().map(r => Object.assign(clone(r), { del: 1 }))); return; }
+    if (await ask('Delete this page?', 'The page and everything on it will be removed. You can undo this.', 'Delete page', true)) {
+      const ps = pages(), i = ps.findIndex(p => p.id === curPage), target = ps[i - 1] || ps[i + 1];
+      const list = [Object.assign(clone(recs.get(curPage)), { del: 1 }), ...pageItems().map(r => Object.assign(clone(r), { del: 1 }))];
+      commit(list); goPage(target.id);
+    }
+  }
+});
+function newBoard() {
+  const list = [];
+  for (const r of recs.values()) if (!r.del && !(r.k === 'page' && r.id === 'p0')) list.push(Object.assign(clone(r), { del: 1 }));
+  const p0 = recs.get('p0'), sc = screenSheet(); if (p0) list.push(Object.assign(clone(p0), { del: 0, w: sc.w, h: sc.h }));
+  putRecords(list); hist.undo = []; hist.redo = []; updateUndoUI(); ensurePage(); delete views.p0; goPage('p0', true); V = defaultView(); applyView(true);
+}
+
+/* =========================================================
+   Modal, toast, help
+   ========================================================= */
+function ask(title, msg, ok, danger) {
+  return new Promise(res => {
+    const m = $('#modal'); m.innerHTML = '';
+    const h = document.createElement('h3'); h.textContent = title;
+    const p = document.createElement('p'); p.textContent = msg;
+    const row = document.createElement('div'); row.className = 'row';
+    const c = document.createElement('button'); c.className = 'btn'; c.textContent = 'Cancel';
+    const o = document.createElement('button'); o.className = 'btn primary'; o.textContent = ok; if (danger) o.style.background = 'var(--danger)';
+    row.append(c, o); m.append(h, p, row);
+    $('#modalWrap').classList.add('open');
+    const done = v => { $('#modalWrap').classList.remove('open'); res(v); };
+    c.onclick = () => done(false); o.onclick = () => done(true);
+    setTimeout(() => o.focus(), 0);
+  });
+}
+$('#modalWrap').addEventListener('pointerdown', e => { if (e.target.id === 'modalWrap') { const c = $('#modal .btn'); c && c.click(); } });
+let toastT;
+function toast(msg, ms = 2800) { const t = $('#toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), ms); }
+function showHelp() {
+  const keys = [
+    ['Select & move', 'V'], ['Pen', 'P'], ['Highlighter', 'H'], ['Eraser', 'E'],
+    ['Line / Arrow', 'L / A'], ['Rectangle / Ellipse', 'R / O'], ['Text', 'T'], ['Eraser size', '1 2 3 4 5'],
+    ['Pan', 'Space + drag'], ['Zoom', 'Ctrl + scroll / pinch'],
+    ['Fit to content', 'Shift 1'], ['Colors', '— click swatches'], ['Stroke size', '1 2 3 4 5'],
+    ['Undo / Redo', 'Ctrl Z / Ctrl Shift Z'], ['Copy / Paste / Duplicate', 'Ctrl C / V / D'],
+    ['Delete selection', 'Delete'], ['Edit text', 'Double-click'],
+    ['Constrain line angle / square', 'Hold Shift'], ['Previous / next page', 'PgUp / PgDn'],
+  ];
+  const m = $('#modal'); m.innerHTML = '<h3>Keyboard shortcuts</h3>';
+  const g = document.createElement('div'); g.className = 'keys';
+  for (const [a, b] of keys) { const s = document.createElement('span'); s.textContent = a; const k = document.createElement('span'); b.split(' / ').forEach((x, i) => { if (i) k.append(' / '); const kb = document.createElement('kbd'); kb.textContent = x; k.appendChild(kb); }); g.append(s, k); }
+  const p = document.createElement('p'); p.textContent = 'On a tablet with a stylus, the pen draws and your finger pans. Pinch to zoom.';
+  const row = document.createElement('div'); row.className = 'row';
+  const o = document.createElement('button'); o.className = 'btn primary'; o.textContent = 'Got it'; o.onclick = () => $('#modalWrap').classList.remove('open');
+  row.appendChild(o); m.append(g, p, row); $('#modalWrap').classList.add('open');
+}
+
+/* =========================================================
+   Keyboard
+   ========================================================= */
+const KEYTOOLS = { v: 'select', p: 'pen', h: 'hl', e: 'eraser', t: 'text' };
+const KEYSHAPES = { l: 'line', a: 'arrow', r: 'rect', o: 'ellipse' };
+document.addEventListener('keydown', e => {
+  if (e.target.closest && e.target.closest('input,textarea')) return;
+  if ($('#modalWrap').classList.contains('open')) { if (e.key === 'Escape') $('#modalWrap').classList.remove('open'); return; }
+  const mod = e.ctrlKey || e.metaKey, k = e.key.toLowerCase();
+  if (mod && k === 'z') { e.preventDefault(); e.shiftKey ? redo() : undo(); return; }
+  if (mod && k === 'y') { e.preventDefault(); redo(); return; }
+  if (mod && k === 'c') { if (selection.size) { copySel(); toast('Copied'); } return; }
+  if (mod && k === 'x') { if (selection.size) { copySel(); deleteSel(); } return; }
+  if (mod && k === 'd') { e.preventDefault(); if (selection.size) { copySel(); pasteItems(); } return; }
+  if (mod && k === 'a') { e.preventDefault(); setTool('select'); elems.forEach((_, id) => selection.add(id)); renderSelection(); updateStylebar(); return; }
+  if (mod && (k === '=' || k === '+')) { e.preventDefault(); zoomAt(1.25); return; }
+  if (mod && k === '-') { e.preventDefault(); zoomAt(.8); return; }
+  if (mod && k === '0') { e.preventDefault(); zoomAt(1 / V.z); return; }
+  if (mod || e.altKey) return;
+  if (e.key === ' ') { if (!spaceDown) { spaceDown = true; board.classList.add('panning'); } e.preventDefault(); return; }
+  if (e.key === 'Delete' || e.key === 'Backspace') { deleteSel(); return; }
+  if (e.key === 'Escape') { closePops(); closeEditors(); clearSelection(); updateStylebar(); return; }
+  if (e.key === 'PageUp') { stepPage(-1); return; }
+  if (e.key === 'PageDown') { stepPage(1); return; }
+  if (e.key === '!' || (e.shiftKey && e.code === 'Digit1')) { fitContent(); return; }
+  if (e.key === '?') { showHelp(); return; }
+  if (S.tool === 'eraser' && '12345'.includes(e.key) && !e.shiftKey) { S.esize = +e.key - 1; updateStylebar(); return; }
+  if ('12345'.includes(e.key) && !e.shiftKey) { S.size = +e.key - 1; if (S.tool === 'select') restyleSel('size', S.size); updateStylebar(); return; }
+  if (e.key === '+' || e.key === '=') { zoomAt(1.25); return; }
+  if (e.key === '-') { zoomAt(.8); return; }
+  if (KEYTOOLS[k]) { setTool(KEYTOOLS[k]); return; }
+  if (KEYSHAPES[k]) { chooseShape(KEYSHAPES[k]); return; }
+  if (e.key === 'Enter' && selection.size === 1) { const r = recs.get([...selection][0]); if (r && r.t === 'text') editItem(r); }
+});
+document.addEventListener('keyup', e => { if (e.key === ' ') { spaceDown = false; if (!action || action.kind !== 'pan') board.classList.remove('panning'); } });
+window.addEventListener('blur', () => { spaceDown = false; board.classList.remove('panning'); });
+
+/* =========================================================
+   Timer
+   ========================================================= */
+const Timer = {
+  mode: null, end: 0, start: 0, paused: null, iv: 0,
+  countdown(min) { this.mode = 'down'; this.end = Date.now() + min * 60000; this.paused = null; this.run(); },
+  stopwatch() { this.mode = 'up'; this.start = Date.now(); this.paused = null; this.run(); },
+  pause() {
+    if (!this.mode) return;
+    if (this.paused === null) { this.paused = Date.now(); $('#timerPause').textContent = 'Resume'; }
+    else { const d = Date.now() - this.paused; this.end += d; this.start += d; this.paused = null; $('#timerPause').textContent = 'Pause'; }
+    this.tick();
+  },
+  reset() { this.mode = null; clearInterval(this.iv); this.paused = null; $('#timerPause').textContent = 'Pause'; $('#timerChip').className = 'ibtn'; $('#timerText').textContent = 'Timer'; },
+  run() { clearInterval(this.iv); $('#timerPause').textContent = 'Pause'; this.iv = setInterval(() => this.tick(), 250); this.tick(); },
+  tick() {
+    const now = this.paused ?? Date.now();
+    let ms = this.mode === 'down' ? this.end - now : now - this.start;
+    const chip = $('#timerChip');
+    if (this.mode === 'down' && ms <= 0) { ms = 0; chip.className = 'ibtn done'; clearInterval(this.iv); }
+    else chip.className = 'ibtn running';
+    const s = Math.round(ms / 1000), m = Math.floor(s / 60);
+    $('#timerText').textContent = `${m}:${String(s % 60).padStart(2, '0')}`;
+    $('#timerText').classList.remove('hide-sm');
+  }
+};
+(function buildTimer() {
+  const box = $('#timerPresets');
+  for (const [lab, min] of [['1:35', 95 / 60], ['1 min', 1], ['5 min', 5], ['10 min', 10], ['15 min', 15], ['35 min', 35]]) {
+    const b = document.createElement('button'); b.className = 'chip'; b.textContent = lab;
+    if (lab === '1:35') b.title = 'Average time per Digital SAT math question';
+    if (lab === '35 min') b.title = 'One Digital SAT math module';
+    b.onclick = () => { Timer.countdown(min); closePops(); }; box.appendChild(b);
+  }
+  $('#timerCustomGo').onclick = () => { const v = parseFloat($('#timerCustom').value); if (v > 0) { Timer.countdown(v); closePops(); } };
+  $('#timerCustom').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Enter') $('#timerCustomGo').click(); });
+  $('#timerStopwatch').onclick = () => { Timer.stopwatch(); closePops(); };
+  $('#timerPause').onclick = () => Timer.pause();
+  $('#timerReset').onclick = () => { Timer.reset(); closePops(); };
+})();
+
+/* =========================================================
+   Save / open / export
+   ========================================================= */
+let downloads = null;
+let saveT;
+function scheduleSave() { clearTimeout(saveT); saveT = setTimeout(saveLocal, 700); }
+let warnedQuota = false;
+async function saveLocal() {
+  const key = BOARD_KEY, data = { v: 1, recs: [...recs.values()].map(r => r.del ? stripDel(r) : r), cur: curPage, views: { ...views } };
+  if (await idb.set(key, data)) return;
+  if (!store.set(key, data)) {
+    store.set(key, Object.assign({}, data, { recs: data.recs.filter(r => r.t !== 'image') }));
+    if (!warnedQuota) { warnedQuota = true; toast('This browser couldn’t save the images on this board — download it as a PDF to keep a copy.', 5000); }
+  }
+}
+window.addEventListener('pagehide', () => { clearTimeout(saveT); saveLocal(); });
+function stripDel(r) { const o = { id: r.id, k: r.k, v: r.v, a: r.a, del: 1 }; if (r.k === 'page') o.z = r.z; else o.page = r.page; return o; }
+async function saveFile(name, data, label) {
+  if (downloads) {
+    try { await downloads.save({ filename: name, data }); toast(label + ' saved'); return; }
+    catch (e) { if (e && e.code === 'declined') return; if (e && e.code === 'rate_limited') { toast('Please wait a moment and try again.'); return; } }
+  }
+  try {
+    const url = URL.createObjectURL(data instanceof Blob ? data : new Blob([data]));
+    const a = document.createElement('a'); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 4000);
+  } catch { toast('Saving files isn’t available here.'); }
+}
+function saveBoardFile() {
+  const live = [...recs.values()].filter(r => !r.del);
+  const json = JSON.stringify({ app: 'math-whiteboard', version: 1, saved: new Date().toISOString(), theme: S.theme, bg: S.bg, records: live });
+  const d = new Date(), stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  saveFile(`math-board-${stamp}.json`, new Blob([json], { type: 'application/json' }), 'Board file');
+}
+$('#boardFile').onchange = async e => {
+  const f = e.target.files[0]; e.target.value = ''; if (!f) return;
+  let data; try { data = JSON.parse(await f.text()); } catch { return toast('That file isn’t a board file.'); }
+  if (!data || !Array.isArray(data.records)) return toast('That file isn’t a board file.');
+  if (!await ask('Open this board?', 'It replaces what’s on the board now' + (Live.others().length ? ' for everyone in the session' : '') + '.', 'Open')) return;
+  const list = [];
+  for (const r of recs.values()) if (!r.del) list.push(Object.assign(clone(r), { del: 1 }));
+  const incoming = data.records.filter(r => validRec(r, true)).map(r => Object.assign(clone(r), { del: 0 }));
+  if (!incoming.some(r => r.k === 'page')) incoming.push({ id: 'p0', k: 'page', del: 0, z: 1 });
+  const ids = new Set(incoming.map(r => r.id));
+  putRecords(list.filter(r => !ids.has(r.id)).concat(incoming));
+  hist.undo = []; hist.redo = []; updateUndoUI();
+  if (THEMES[data.theme]) { S.theme = data.theme; store.set('mb.theme', S.theme); }
+  if (BGS[data.bg]) { S.bg = data.bg; store.set('mb.bg', S.bg); }
+  buildPatterns();
+  goPage(pages()[0].id, true); fitContent(); toast('Board opened');
+};
+
+function pageSVG(scale) {
+  const sz = sheet(), box = { x: 0, y: 0, w: sz.w, h: sz.h };
+  const W = Math.max(1, Math.round(box.w * scale)), H = Math.max(1, Math.round(box.h * scale));
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="${box.x} ${box.y} ${box.w} ${box.h}"><defs>${$('#patterns').innerHTML}</defs><rect x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" fill="${T().bg}"/><rect x="${box.x}" y="${box.y}" width="${box.w}" height="${box.h}" fill="url(#pat)"/><clipPath id="xclip"><rect width="${box.w}" height="${box.h}"/></clipPath><g clip-path="url(#xclip)">${itemsG.innerHTML}</g></svg>`;
+  return { svg, W, H };
+}
+const JSPDF_URL = window.MB_JSPDF || 'https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js';
+let jspdfP = null;
+function loadJsPdf() {
+  if (jspdfP) return jspdfP;
+  jspdfP = new Promise((res, rej) => {
+    if (window.jspdf && window.jspdf.jsPDF) return res(window.jspdf.jsPDF);
+    const sc = document.createElement('script'); sc.src = JSPDF_URL;
+    sc.onload = () => window.jspdf && window.jspdf.jsPDF ? res(window.jspdf.jsPDF) : (jspdfP = null, rej(new Error('jspdf')));
+    sc.onerror = () => { jspdfP = null; rej(new Error('jspdf')); };
+    document.head.appendChild(sc);
+  });
+  return jspdfP;
+}
+function pageSVGFor(pid, scale) {
+  const sz = sheet(pid), g = document.createElementNS(NS, 'g');
+  for (const r of pageItems(pid)) g.appendChild(buildEl(r));
+  const W = Math.max(1, Math.round(sz.w * scale)), H = Math.max(1, Math.round(sz.h * scale));
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="0 0 ${sz.w} ${sz.h}"><defs>${$('#patterns').innerHTML}</defs><rect width="${sz.w}" height="${sz.h}" fill="${T().bg}"/><rect width="${sz.w}" height="${sz.h}" fill="url(#pat)"/><clipPath id="xclip"><rect width="${sz.w}" height="${sz.h}"/></clipPath><g clip-path="url(#xclip)">${g.innerHTML}</g></svg>`;
+  return { svg, W, H, w: sz.w, h: sz.h };
+}
+async function svgToJpeg(svg, W, H) {
+  const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+  try {
+    const img = new Image();
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d'); ctx.fillStyle = T().bg; ctx.fillRect(0, 0, W, H); ctx.drawImage(img, 0, 0, W, H);
+    return cv.toDataURL('image/jpeg', .9);
+  } finally { URL.revokeObjectURL(url); }
+}
+let exportingPdf = false;
+async function exportBoardPDF() {
+  if (exportingPdf) return; exportingPdf = true;
+  try {
+    toast('Preparing PDF…', 30000);
+    let JsPDF; try { JsPDF = await loadJsPdf(); } catch { toast('Couldn’t load the PDF maker — check your internet connection.', 4000); return; }
+    const ps = pages(); let doc = null;
+    for (let i = 0; i < ps.length; i++) {
+      toast(`Preparing PDF… page ${i + 1} of ${ps.length}`, 30000);
+      const sz = sheet(ps[i].id), scale = clamp(2000 / Math.max(sz.w, sz.h), .8, 2.2);
+      const { svg, W, H, w, h } = pageSVGFor(ps[i].id, scale);
+      const data = await svgToJpeg(svg, W, H);
+      const pw = w * .75, ph = h * .75, orient = pw > ph ? 'landscape' : 'portrait';
+      if (!doc) doc = new JsPDF({ orientation: orient, unit: 'pt', format: [pw, ph], compress: true });
+      else doc.addPage([pw, ph], orient);
+      doc.addImage(data, 'JPEG', 0, 0, pw, ph, undefined, 'FAST');
+    }
+    const blob = doc.output('blob');
+    $('#toast').classList.remove('show');
+    const who = (typeof boardName === 'function' ? boardName(activeBoard) : 'board').replace(/[^\w\- ]+/g, '').trim().replace(/\s+/g, '-').toLowerCase() || 'board';
+    const d = new Date(), stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    await saveFile(`${who}-${stamp}.pdf`, blob, 'PDF');
+  } catch (e) { toast('Couldn’t create the PDF.', 4000); }
+  finally { exportingPdf = false; }
+}
+async function exportPNG(copy) {
+  const area = sheet().w * sheet().h;
+  const scale = clamp(Math.sqrt(16e6 / area), .5, 2);
+  const { svg, W, H } = pageSVG(scale);
+  const img = new Image();
+  const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }));
+  try {
+    await new Promise((res, rej) => { img.onload = res; img.onerror = rej; img.src = url; });
+    const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    cv.getContext('2d').drawImage(img, 0, 0, W, H);
+    const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+    const n = pages().findIndex(p => p.id === curPage) + 1;
+    if (copy) {
+      try { await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]); toast('Page copied as an image'); }
+      catch { toast('Copying images isn’t allowed here — try “Save page as image”.'); }
+    } else await saveFile(`math-board-page-${n}.png`, blob, 'Image');
+  } catch (e) { toast('Couldn’t create the image.'); }
+  finally { URL.revokeObjectURL(url); }
+}
+
+/* =========================================================
+   Validation of records arriving from others / files
+   ========================================================= */
+const TYPES = new Set(['stroke', 'line', 'rect', 'ellipse', 'tri', 'rtri', 'axes', 'text', 'math', 'graph', 'numline', 'image']);
+const isNum = v => typeof v === 'number' && isFinite(v);
+const isStr = (v, n) => typeof v === 'string' && v.length <= n;
+function validRec(r, fromFile) {
+  if (!r || typeof r !== 'object' || !isStr(r.id, 48) || !r.id) return false;
+  if (!fromFile && (!isNum(r.v) || !isStr(r.a, 24))) return false;
+  if (r.k === 'page') return isNum(r.z) && (r.w === undefined || (isNum(r.w) && r.w >= 200 && r.w <= 20000)) && (r.h === undefined || (isNum(r.h) && r.h >= 200 && r.h <= 20000));
+  if (r.k !== 'item' || !isStr(r.page, 48)) return false;
+  if (r.del) return true;
+  if (!TYPES.has(r.t) || !isNum(r.z)) return false;
+  if (r.c !== undefined && !COLORS[r.c] && !isHex(r.c)) return false;
+  if (r.rot !== undefined && !isNum(r.rot)) return false;
+  if (r.rc !== undefined && !(Array.isArray(r.rc) && r.rc.length === 2 && isNum(r.rc[0]) && isNum(r.rc[1]))) return false;
+  switch (r.t) {
+    case 'stroke': return Array.isArray(r.pts) && r.pts.length > 0 && r.pts.length < 5000 && r.pts.every(q => Array.isArray(q) && isNum(q[0]) && isNum(q[1])) && isNum(r.w);
+    case 'line': case 'rect': case 'ellipse': case 'tri': case 'rtri': case 'axes': return ['x1', 'y1', 'x2', 'y2', 'w'].every(k => isNum(r[k]));
+    case 'text': return isNum(r.x) && isNum(r.y) && isNum(r.size) && isStr(r.text, 2000);
+    case 'math': if (!(isNum(r.x) && isNum(r.y) && isNum(r.size) && isStr(r.tex, 1500))) return false; r.tex = sanitizeTex(r.tex); return true;
+    case 'graph': return ['x', 'y', 'w', 'h', 'xmin', 'xmax', 'ymin', 'ymax'].every(k => isNum(r[k])) && Array.isArray(r.fns) && r.fns.length <= 8 && r.fns.every(f => f && isStr(f.e, 200) && COLORS[f.c]);
+    case 'numline': return ['x', 'y', 'w', 'min', 'max', 'step'].every(k => isNum(r[k])) && (r.marks === undefined || isStr(r.marks, 200));
+    case 'image': if (r.fn !== undefined && !isStr(r.fn, 80)) return false; if (r.pn !== undefined && !isNum(r.pn)) return false; return isNum(r.x) && isNum(r.y) && isNum(r.w) && isNum(r.h) && typeof r.src === 'string' && r.src.length < 6e6 && /^data:image\/(png|jpeg|gif|webp);base64,/.test(r.src);
+  }
+  return false;
+}
+
+/* =========================================================
+   Live session (people viewing this page together)
+   ========================================================= */
+const randCode = (n = 7) => { const a = 'abcdefghjkmnpqrstuvwxyz23456789'; let s = ''; const r = crypto.getRandomValues(new Uint8Array(n)); for (const x of r) s += a[x % a.length]; return s; };
+const PEER_OPTS = Object.assign({ debug: 0 }, window.MB_PEER_OPTS || {});
+const fullRecs = () => [...recs.values()].map(r => r.del ? stripDel(r) : r);
+const TUTOR_CODE = (() => { let c = store.get('mb.tutorCode', null); if (!(typeof c === 'string' && /^[a-z0-9]{6,12}$/.test(c))) { c = randCode(8); store.set('mb.tutorCode', c); } return c; })();
+const baseUrl = () => location.origin + location.pathname;
+
+/* ---------- students (tutor side) ---------- */
+const okStu = x => x && typeof x.key === 'string' && /^[a-z0-9]{6,16}$/.test(x.key) && typeof x.name === 'string' && x.name.length <= 40;
+const Students = {
+  list: (store.get('mb.students', []) || []).filter(okStu),
+  removed: (store.get('mb.studentsRemoved', []) || []).filter(x => x && typeof x.key === 'string' && isNum(x.t)),
+  save() { store.set('mb.students', this.list); store.set('mb.studentsRemoved', this.removed.slice(-200)); },
+  get(key) { return this.list.find(s => s.key === key) || null; },
+  add(name) { const s = { key: randCode(10), name: name.trim().slice(0, 40) || 'Student', created: Date.now(), t: Date.now() }; this.list.push(s); this.save(); TutorSync.push(); return s; },
+  rename(key, name) { const s = this.get(key); if (s) { s.name = name.trim().slice(0, 40) || s.name; s.t = Date.now(); this.save(); TutorSync.push(); } },
+  remove(key) { this.list = this.list.filter(s => s.key !== key); this.removed.push({ key, t: Date.now() }); this.save(); idb.del('mb.board.s.' + key); TutorSync.push(); },
+  merge(list, removed) {
+    let changed = false;
+    for (const r of (Array.isArray(removed) ? removed : [])) {
+      if (!r || typeof r.key !== 'string' || !isNum(r.t)) continue;
+      const loc = this.get(r.key);
+      if (loc && (loc.t || 0) <= r.t) { this.list = this.list.filter(x => x.key !== r.key); idb.del('mb.board.s.' + r.key); changed = true; }
+      if (!this.removed.some(x => x.key === r.key)) { this.removed.push({ key: r.key, t: r.t }); changed = true; }
+    }
+    for (const st of (Array.isArray(list) ? list : [])) {
+      if (!okStu(st)) continue;
+      const rm = this.removed.find(x => x.key === st.key);
+      if (rm && rm.t >= (st.t || 0)) continue;
+      const loc = this.get(st.key);
+      if (!loc) { this.list.push({ key: st.key, name: st.name, created: isNum(st.created) ? st.created : Date.now(), t: isNum(st.t) ? st.t : 0 }); changed = true; }
+      else if ((st.t || 0) > (loc.t || 0)) { loc.name = st.name; loc.t = st.t; changed = true; }
+    }
+    if (changed) this.save();
+    return changed;
+  },
+  link(key) { const st = this.get(key); const slug = (st ? st.name : '').toLowerCase().replace(/[^a-z0-9]+/g, '').slice(0, 16) || 'board'; return `${baseUrl()}#${slug}-${key}`; },
+};
+/* keeps the student list the same on all of the tutor's linked devices */
+const TutorSync = {
+  peer: null, conns: new Map(), hostConn: null, role: null, timer: 0,
+  start() { if (JOIN_CODE || !window.Peer) return; this.tryHost(); },
+  payload() { return { type: 'students', list: Students.list, removed: Students.removed.slice(-200) }; },
+  tryHost() {
+    const p = this.peer = new Peer('mtbt-' + TUTOR_CODE, PEER_OPTS);
+    p.on('open', () => { this.role = 'host'; });
+    p.on('connection', c => {
+      c.on('open', () => { this.conns.set(c.peer, c); try { c.send(this.payload()); } catch {} });
+      c.on('data', d => this.onData(d, c.peer));
+      const gone = () => this.conns.delete(c.peer); c.on('close', gone); c.on('error', gone);
+    });
+    p.on('error', e => { if (this.peer !== p) return; if (e.type === 'unavailable-id') { p.destroy(); this.peer = null; this.joinHost(); } else if (['network', 'server-error', 'socket-error'].includes(e.type)) this.restart(8000); });
+    p.on('disconnected', () => setTimeout(() => { if (this.peer === p && !p.destroyed) try { p.reconnect(); } catch {} }, 3000));
+  },
+  joinHost() {
+    const p = this.peer = new Peer(PEER_OPTS);
+    p.on('open', () => {
+      const c = p.connect('mtbt-' + TUTOR_CODE, { reliable: true });
+      c.on('open', () => { this.role = 'client'; this.hostConn = c; try { c.send(this.payload()); } catch {} });
+      c.on('data', d => this.onData(d, 'host'));
+      c.on('close', () => { if (this.hostConn === c) { this.hostConn = null; this.restart(); } });
+    });
+    p.on('error', e => { if (this.peer === p && (e.type === 'peer-unavailable' || ['network', 'server-error', 'socket-error'].includes(e.type))) this.restart(); });
+  },
+  restart(ms) { const p = this.peer; this.peer = null; this.role = null; this.hostConn = null; this.conns.clear(); try { p && p.destroy(); } catch {} clearTimeout(this.timer); this.timer = setTimeout(() => this.tryHost(), ms || 1500 + Math.random() * 2000); },
+  onData(d, from) {
+    if (!d || d.type !== 'students') return;
+    const changed = Students.merge(d.list, d.removed);
+    if (changed) {
+      if (activeBoard && !Students.get(activeBoard)) switchBoard(null);
+      updateBoardChip(); Live.ensureHost();
+      if ($('#studentsPop').classList.contains('open')) renderStudentsPop();
+    }
+    if (this.role === 'host' && changed) { const m = this.payload(); for (const [id, c] of this.conns) if (id !== from && c.open) try { c.send(m); } catch {} }
+    if (this.role === 'host' && from !== 'host') { const c = this.conns.get(from); if (c && c.open) try { c.send(this.payload()); } catch {} }
+  },
+  push() { const m = this.payload(); if (this.role === 'host') { for (const c of this.conns.values()) if (c.open) try { c.send(m); } catch {} } else if (this.hostConn && this.hostConn.open) try { this.hostConn.send(m); } catch {} },
+  linkedCount() { return this.role === 'host' ? this.conns.size : this.hostConn ? 1 : 0; },
+};
+let activeBoard = (() => {
+  if (JOIN_CODE) return null;
+  if (LINK_IS_MINE) return Students.get(LINK_CODE) ? LINK_CODE : null;
+  const k = store.get('mb.activeBoard', null); return k && Students.get(k) ? k : null;
+})();
+const adhocLink = () => `${baseUrl()}#live-${Live.adhoc}`;
+function syncAddressBar() {
+  if (JOIN_CODE) return;
+  try { history.replaceState(null, '', activeBoard ? Students.link(activeBoard).replace(baseUrl(), location.pathname) : location.pathname); } catch {}
+}
+window.addEventListener('hashchange', () => location.reload());
+if (!JOIN_CODE) BOARD_KEY = activeBoard ? 'mb.board.s.' + activeBoard : 'mb.board';
+if (!JOIN_CODE) store.set('mb.activeBoard', activeBoard);
+const boardName = k => k ? (Students.get(k) || {}).name || 'Student' : 'My board';
+let switching = null;
+async function switchBoard(key) {
+  if (switching) await switching;
+  if (key === activeBoard) return;
+  switching = (async () => {
+    closeEditors(); closePops(); clearSelection();
+    clearTimeout(saveT); await saveLocal();
+    Live.beforeSwitch(key);
+    activeBoard = key; store.set('mb.activeBoard', key);
+    BOARD_KEY = key ? 'mb.board.s.' + key : 'mb.board';
+    recs.clear(); hist.undo = []; hist.redo = []; for (const k in views) delete views[k];
+    await loadBoard();
+    applySheet(); if (!V) V = defaultView();
+    renderPage(); applyView(true); updatePageUI(); updateUndoUI(); updateBoardChip(); syncAddressBar();
+    Live.afterSwitch(key);
+  })();
+  await switching; switching = null;
+}
+function updateBoardChip() {
+  const c = $('#boardChip'); if (!c) return;
+  if (JOIN_CODE) { c.style.display = 'none'; return; }
+  $('#boardChipText').textContent = boardName(activeBoard);
+}
+
+/* ---------- live sessions ---------- */
+const Live = {
+  peer: null, role: null, code: null, conns: new Map(), pending: new Map(), hostConn: null, connecting: false, retryT: 0,
+  peers: [], presMap: new Map(), me: 'me', following: null, connected: false, status: '',
+  adhoc: (() => { const a = store.get('mb.adhoc', null); return typeof a === 'string' && /^[a-z0-9]{6,16}$/.test(a) ? a : null; })(),
+  name: store.get('mb.name', ''), col: store.get('mb.col', PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)]),
+  myPres: {}, presDirty: false, followPage: store.get('mb.followPage', true), lastHostPage: null,
+  init() {
+    store.set('mb.col', this.col);
+    this.myPres = { n: this.name || null, col: this.col, view: this.viewObj() };
+    setInterval(() => this.flushPres(), 50);
+    const start = () => { if (JOIN_CODE) this.join(); else { this.ensureHost(); TutorSync.start(); } };
+    if (window.Peer) start();
+    else { const s = $('#lib-peer'); s.addEventListener('load', start, { once: true }); s.addEventListener('error', () => { if (JOIN_CODE) toast('Couldn’t load the live-session library. Check your internet connection.', 5000); }, { once: true }); }
+    this.refreshPeers();
+  },
+  /* ----- tutor ----- */
+  hostCode() { return JOIN_CODE ? null : (activeBoard || this.adhoc || null); },
+  shouldHost() { return !!this.hostCode(); },
+  ensureHost() {
+    if (!window.Peer) return;
+    const want = this.hostCode();
+    if (this.peer && (this.hostingCode || this.clientCode) !== want) this.stopHost();
+    if (want && !this.peer) this.startHost(want);
+    this.renderChip();
+  },
+  startHost(code) {
+    this.role = 'host'; this.code = code; this.hostingCode = code;
+    const peer = this.peer = new Peer('mtb-' + code, PEER_OPTS);
+    let tries = 0;
+    peer.on('open', id => { this.connected = true; this.me = id; this.refreshPeers(); });
+    peer.on('connection', conn => {
+      conn.on('open', () => this.route(conn));
+      conn.on('data', d => { if (this.conns.has(conn.peer)) this.onData(d, conn.peer); });
+      const gone = () => {
+        if (!this.conns.has(conn.peer)) return;
+        this.conns.delete(conn.peer); this.presMap.delete(conn.peer);
+        this.broadcast({ type: 'left', peer: conn.peer });
+        if (this.following === conn.peer) this.unfollow(true);
+        this.refreshPeers();
+      };
+      conn.on('close', gone); conn.on('error', gone);
+    });
+    peer.on('disconnected', () => { this.connected = false; this.renderChip(); setTimeout(() => { if (this.peer === peer && !peer.destroyed) try { peer.reconnect(); } catch {} }, 2500); });
+    peer.on('error', err => {
+      if (err.type === 'unavailable-id' && this.peer === peer) {
+        peer.destroy(); this.peer = null; this.connected = false; this.hostingCode = null;
+        if (this.hostCode() === code) this.becomeClient(code);
+      } else if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(err.type)) { this.connected = false; this.renderChip(); }
+    });
+    this.renderChip();
+  },
+  becomeClient(code) {
+    this.tutorClient = true; this.clientCode = code; this.role = 'student'; this.code = code; this.status = 'connecting'; this.lastHostPage = null;
+    const peer = this.peer = new Peer(PEER_OPTS);
+    peer.on('open', id => { if (this.peer !== peer) return; this.me = id; this.connectHost(); });
+    peer.on('error', err => { if (this.peer !== peer) return; if (err.type === 'peer-unavailable' || ['network', 'server-error', 'socket-error'].includes(err.type)) { this.connecting = false; this.retakeHost(); } });
+    this.renderChip();
+  },
+  retakeHost() {
+    const p = this.peer; this.peer = null; this.hostConn = null; this.connected = false; this.tutorClient = false; this.clientCode = null; this.role = null; this.presMap.clear();
+    try { p && p.destroy(); } catch {}
+    this.refreshPeers();
+    setTimeout(() => this.ensureHost(), 1200 + Math.random() * 1200);
+  },
+  stopHost() {
+    if (this.tutorClient) { const c = this.hostConn; try { c && c.close(); } catch {} const p = this.peer; this.peer = null; this.hostConn = null; this.tutorClient = false; this.clientCode = null; this.role = null; this.connected = false; this.presMap.clear(); try { p && p.destroy(); } catch {} this.refreshPeers(); return; }
+    for (const { conn } of this.conns.values()) { try { conn.send({ type: 'bye' }); } catch {} const c = conn; setTimeout(() => { try { c.close(); } catch {} }, 300); }
+    const pr = this.peer; setTimeout(() => { try { pr && pr.destroy(); } catch {} }, 350);
+    this.peer = null; this.hostingCode = null; this.role = null; this.conns.clear(); this.pending.clear(); this.presMap.clear(); this.connected = false; this.following = null;
+    this.refreshPeers();
+  },
+  route(conn) {
+    const s = conn.metadata && typeof conn.metadata.s === 'string' ? conn.metadata.s : '';
+    if (s && s !== this.hostingCode) { try { conn.send({ type: 'bye' }); } catch {} setTimeout(() => { try { conn.close(); } catch {} }, 300); return; }
+    this.accept(conn, activeBoard);
+  },
+  accept(conn, target) {
+    this.pending.delete(conn.peer);
+    this.conns.set(conn.peer, { conn, s: target });
+    this.presMap.set(conn.peer, { pres: {}, t: Date.now() });
+    try {
+      conn.send({ type: 'welcome', board: target ? boardName(target) : null });
+      conn.send({ type: 'state', r: fullRecs() });
+      conn.send({ type: 'presAll', list: [[this.me, this.myPres], ...[...this.presMap].filter(([k]) => k !== conn.peer).map(([k, v]) => [k, v.pres])] });
+    } catch {}
+    this.renderNotice(); this.refreshPeers();
+    if (target) toast(`Someone joined ${boardName(target)}’s board`);
+  },
+  beforeSwitch(key) { this.stopHost(); },
+  afterSwitch(key) { setTimeout(() => this.ensureHost(), 400); },
+  disconnectAll() { this.stopHost(); setTimeout(() => this.ensureHost(), 400); },
+  startAdhoc() { this.adhoc = randCode(10); store.set('mb.adhoc', this.adhoc); if (activeBoard !== null) switchBoard(null); else this.ensureHost(); },
+  endAdhoc() { this.adhoc = null; store.set('mb.adhoc', null); this.ensureHost(); this.refreshPeers(); },
+  renderNotice() { const n = $('#notice'); if (n) n.classList.remove('show'); },
+  broadcast(msg, except) { for (const [id, c] of this.conns) if (id !== except && c.conn.open) try { c.conn.send(msg); } catch {} },
+  /* ----- student ----- */
+  join() {
+    if (!window.Peer) return;
+    this.role = 'student'; this.code = JOIN_CODE;
+    this.peer = new Peer(PEER_OPTS);
+    this.peer.on('open', id => { this.me = id; this.connectHost(); });
+    this.peer.on('error', err => {
+      if (err.type === 'peer-unavailable') { this.connecting = false; this.status = 'waiting'; this.renderChip(); this.renderPop(); this.retry(); }
+      else if (['network', 'server-error', 'socket-error', 'socket-closed'].includes(err.type)) { this.connecting = false; this.retry(); }
+    });
+    this.peer.on('disconnected', () => { setTimeout(() => { try { this.peer.reconnect(); } catch {} }, 2500); });
+    this.status = 'connecting'; this.renderChip();
+  },
+  retry(ms = 3000) { if (this.status === 'denied') return; clearTimeout(this.retryT); this.retryT = setTimeout(() => this.connectHost(), ms); },
+  connectHost() {
+    if (this.connecting || this.hostConn || !this.peer || this.peer.destroyed || this.status === 'denied') return;
+    if (this.peer.disconnected) { try { this.peer.reconnect(); } catch {} this.retry(); return; }
+    this.connecting = true;
+    const c = this.peer.connect('mtb-' + this.code, { reliable: true, metadata: { s: this.code } });
+    const t = setTimeout(() => { if (!c.open) { this.connecting = false; try { c.close(); } catch {} this.retry(); } }, 12000);
+    c.on('open', () => { clearTimeout(t); this.connecting = false; this.hostConn = c; this.status = 'knocking'; this.renderChip(); });
+    c.on('data', d => this.onData(d, 'host'));
+    c.on('close', () => {
+      clearTimeout(t); this.connecting = false;
+      if (this.hostConn !== c) return;
+      const was = this.status;
+      this.hostConn = null; this.connected = false; this.presMap.clear();
+      if (this.following) this.unfollow(true);
+      if (this.tutorClient) { this.retakeHost(); return; }
+      if (was !== 'denied') { this.status = 'waiting'; if (was === 'connected') toast('Lost connection to the tutor — reconnecting…', 3500); }
+      this.refreshPeers(); this.retry(was === 'switched' ? 5000 : 3000);
+    });
+  },
+  /* ----- shared ----- */
+  onData(d, from) {
+    if (!d || typeof d !== 'object') return;
+    if (from === 'host') {
+      if (d.type === 'denied') { this.status = 'denied'; this.renderChip(); this.renderPop(); toast('This link isn’t active anymore — ask your tutor for a new one.', 6000); return; }
+      if (d.type === 'wait') { this.status = 'admit'; this.renderChip(); this.renderPop(); toast('Your tutor will let you in shortly…', 4000); return; }
+      if (d.type === 'welcome') { this.status = 'connected'; this.connected = true; try { this.hostConn.send({ type: 'state', r: fullRecs() }); } catch {} this.presDirty = true; this.flushPres(); this.renderChip(); this.renderPop(); toast(this.tutorClient ? 'Synced with your other device' : 'Connected to the live board'); return; }
+      if (d.type === 'bye') { this.status = 'switched'; this.connected = false; this.renderChip(); if (!this.tutorClient) toast('Your tutor stepped away from your board — you’ll reconnect when they’re back.', 5000); return; }
+    }
+    if (d.type === 'state' || d.type === 'op') {
+      if (!Array.isArray(d.r) || d.r.length > 20000) return;
+      const ok = [];
+      for (const r of d.r) if (validRec(r, false) && applyRec(r)) ok.push(r);
+      if (ok.length) { afterChange(); this.syncHostPage(); if (this.role === 'host') this.broadcast({ type: 'op', r: ok }, from); }
+      return;
+    }
+    if (d.type === 'pres') {
+      if (!d.pres || typeof d.pres !== 'object' || JSON.stringify(d.pres).length > 4000) return;
+      if (this.role === 'host') { this.presMap.set(from, { pres: d.pres, t: Date.now() }); this.broadcast({ type: 'pres', peer: from, pres: d.pres }, from); }
+      else if (from === 'host' && typeof d.peer === 'string' && d.peer !== this.me) this.presMap.set(d.peer, { pres: d.pres, t: Date.now() });
+      this.refreshPeers(); return;
+    }
+    if (from !== 'host') return;
+    if (d.type === 'presAll' && Array.isArray(d.list)) { for (const [k, p] of d.list) if (typeof k === 'string' && k !== this.me && p && typeof p === 'object') this.presMap.set(k, { pres: p, t: Date.now() }); this.refreshPeers(); }
+    else if (d.type === 'left' && typeof d.peer === 'string') { this.presMap.delete(d.peer); if (this.following === d.peer) this.unfollow(true); this.refreshPeers(); }
+    else if (d.type === 'summon' && d.v) { const v = d.v; if (isNum(v.cx) && isNum(v.cy) && isNum(v.z) && isStr(v.p, 48)) { this.jumpTo(v); toast('Your tutor brought you to their view'); } }
+  },
+  send(list) {
+    if (!this.connected) return;
+    const r = list.map(x => x.del ? stripDel(x) : x);
+    if (this.role === 'host') this.broadcast({ type: 'op', r });
+    else if (this.hostConn && this.hostConn.open && this.status === 'connected') try { this.hostConn.send({ type: 'op', r }); } catch {}
+  },
+  setPres(patch) { for (const k in patch) { if (patch[k] === null) delete this.myPres[k]; else this.myPres[k] = patch[k]; } this.presDirty = true; },
+  flushPres() {
+    if (!this.presDirty || !this.connected) return; this.presDirty = false;
+    if (this.role === 'host') this.broadcast({ type: 'pres', peer: this.me, pres: this.myPres });
+    else if (this.hostConn && this.hostConn.open && this.status === 'connected') try { this.hostConn.send({ type: 'pres', pres: this.myPres }); } catch {}
+  },
+  others() { return this.peers.filter(p => !p.sameTab); },
+  displayName(p) {
+    const n = p.presence && typeof p.presence.n === 'string' ? p.presence.n.slice(0, 24) : '';
+    if (n) return n;
+    if (this.role === 'host') { const c = this.conns.get(p.peer); if (c && c.s) return boardName(c.s); }
+    return p.isHost ? 'Tutor' : 'Student';
+  },
+  peerColor(p) { const c = p.presence && p.presence.col; return typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c) ? c : '#868e96'; },
+  pushPresence() { this.setPres({ n: this.name || null, col: this.col, view: this.viewObj() }); },
+  viewObj() { const c = viewCenter(); return { cx: rd(c.x), cy: rd(c.y), z: Math.round(V.z * 1000) / 1000, p: curPage }; },
+  viewChanged() { if (this.myPres) this.setPres({ view: this.viewObj() }); },
+  cursor(p) { this.setPres({ cur: p ? { x: rd(p.x), y: rd(p.y), p: curPage } : null }); },
+  laser(pts) { this.setPres({ las: pts ? { pts, p: curPage } : null }); },
+  syncHostPage() {
+    if (this.role !== 'student' || !this.followPage || this.following) return;
+    const h = this.presMap.get('mtb-' + this.code), p = h && h.pres && h.pres.view && h.pres.view.p;
+    if (!isStr(p, 48) || p === this.lastHostPage) return;
+    const pr = recs.get(p); if (!pr || pr.del) return;
+    this.lastHostPage = p;
+    if (p !== curPage) goPage(p);
+  },
+  refreshPeers() {
+    const hostId = this.code ? 'mtb-' + this.code : null;
+    this.peers = [{ peer: this.me, sameTab: true, isHost: this.role === 'host', presence: this.myPres, updatedAt: Date.now() },
+      ...[...this.presMap].map(([peer, v]) => ({ peer, sameTab: false, isHost: peer === hostId, presence: v.pres || {}, updatedAt: v.t }))];
+    if (this.following && !this.peers.find(p => p.peer === this.following)) this.unfollow(true);
+    if (this.following) this.applyFollow();
+    this.syncHostPage();
+    this.renderChip(); renderPeers();
+    if ($('#livePop').classList.contains('open')) this.renderPop();
+    if ($('#studentsPop') && $('#studentsPop').classList.contains('open')) renderStudentsPop();
+  },
+  jumpTo(d) {
+    if (recs.get(d.p) && !recs.get(d.p).del && d.p !== curPage) goPage(d.p);
+    const b = board.getBoundingClientRect(), z = d.z;
+    V = { z, tx: b.width / 2 - d.cx * z, ty: b.height / 2 - d.cy * z }; applyView(true);
+  },
+  follow(peer) { this.following = peer; this.applyFollow(); this.renderPop(); this.renderChip(); },
+  unfollow(silent) { if (!this.following) return; this.following = null; if (!silent) toast('Stopped following'); this.renderPop(); this.renderChip(); },
+  applyFollow() { const p = this.peers.find(x => x.peer === this.following); const v = p && p.presence && p.presence.view; if (v && isNum(v.cx) && isNum(v.cy) && isNum(v.z) && isStr(v.p, 48)) this.jumpTo(v); },
+  summon() { if (this.role !== 'host') return; this.broadcast({ type: 'summon', v: this.viewObj() }); toast('Everyone is now looking at your view'); },
+  renderChip() {
+    const chip = $('#liveChip'), o = this.others();
+    const bcp = $('#boardChip'); if (bcp) bcp.classList.toggle('live', o.length > 0);
+    if (!chip) return;
+    chip.classList.toggle('connected', !!this.connected && (this.role !== 'host' || o.length > 0));
+    let txt = 'Go live';
+    if (this.role === 'host') {
+      const linkable = activeBoard !== null || this.adhoc;
+      txt = !this.connected ? 'Connecting…' : o.length ? `Live · ${o.length + 1}` : linkable ? 'Ready' : 'Go live';
+    }
+    if (JOIN_CODE) txt = { connected: this.following ? 'Following' : `Live · ${o.length + 1}`, admit: 'Waiting to be let in', waiting: 'Waiting for tutor', switched: 'Tutor stepped away', denied: 'Link not active', knocking: 'Connecting…', connecting: 'Connecting…' }[this.status] || 'Connecting…';
+    $('#liveText').textContent = txt;
+    const av = $('#avatars'); av.innerHTML = '';
+    o.slice(0, 4).forEach(p => { const s = document.createElement('span'); s.style.background = this.peerColor(p); s.textContent = this.displayName(p)[0].toUpperCase(); av.appendChild(s); });
+  },
+  renderPop() {
+    $('#nameInput').value = this.name;
+    const box = $('#liveBody'); box.innerHTML = '';
+    const mk = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+    const hint = t => { const h = mk('div', 'hint', t); h.style.padding = '2px 10px'; box.appendChild(h); };
+    const linkRow = (label, url) => {
+      box.appendChild(mk('div', 'menu-label', label));
+      const row = mk('div', 'row'); row.style.padding = '0 6px 6px';
+      const inp = mk('input', 'field'); inp.readOnly = true; inp.value = url; inp.style.cssText = 'padding:6px 8px;font-size:12.5px';
+      inp.onfocus = () => inp.select();
+      const cp = mk('button', 'mini', 'Copy');
+      cp.onclick = () => copyText(url, cp);
+      row.append(inp, cp); box.appendChild(row);
+      if (location.protocol === 'file:') hint('⚠ This board is opened from a file on your computer, so links won’t work for students. Put it on your website first.');
+    };
+    if (!JOIN_CODE) {
+      if (activeBoard) {
+        linkRow(`${boardName(activeBoard)}’s link (always the same)`, Students.link(activeBoard));
+        if (!this.connected) hint('Connecting to the session server…');
+      } else if (this.adhoc) {
+        linkRow('One-time link for My board', adhocLink());
+      } else {
+        const b = mk('button', 'btn primary', 'Start a one-time session'); b.style.cssText = 'width:calc(100% - 12px);margin:4px 6px 8px';
+        b.onclick = () => this.startAdhoc(); box.appendChild(b);
+        hint('Makes a link to My board that works until you end it. For regular students, add them under the board button at the top. Each student gets their own board and a permanent link.');
+        return;
+      }
+    } else {
+      const fl = mk('label', 'pdfopt'); fl.style.cssText = 'margin:2px 10px 6px;font-size:13px';
+      const fc = mk('input'); fc.type = 'checkbox'; fc.checked = this.followPage;
+      fc.onchange = () => { this.followPage = fc.checked; store.set('mb.followPage', fc.checked); this.lastHostPage = null; this.syncHostPage(); };
+      fl.append(fc, ' Go to the page my tutor is on'); box.appendChild(fl);
+      hint({ connected: 'You’re on your tutor’s live board. Pan and zoom freely. It only changes your own view.', admit: 'Your tutor is with someone else right now. You’ll be let in automatically.', switched: 'Your tutor stepped away. This page will reconnect on its own.', denied: 'This link isn’t active. Ask your tutor for a new one.' }[this.status] || 'Waiting for your tutor to open the board… this page connects on its own.');
+    }
+    box.appendChild(mk('div', 'menu-label', 'Here now'));
+    const list = mk('div'); list.style.padding = '0 2px'; box.appendChild(list);
+    const meRow = mk('div', 'peer-row'); const md = mk('span', 'pdot'); md.style.background = this.col;
+    meRow.append(md, mk('span', null, (this.name || (JOIN_CODE ? 'Student' : 'Tutor')) + ' (you)')); list.appendChild(meRow);
+    for (const p of this.others()) {
+      const row = mk('div', 'peer-row'); const dot = mk('span', 'pdot'); dot.style.background = this.peerColor(p);
+      const b = mk('button', 'mini', this.following === p.peer ? 'Unfollow' : 'Follow');
+      b.onclick = () => this.following === p.peer ? this.unfollow() : this.follow(p.peer);
+      row.append(dot, mk('span', null, this.displayName(p)), b); list.appendChild(row);
+    }
+    if (!this.others().length) { const e = mk('div', 'hint', JOIN_CODE ? 'Nobody else yet.' : 'Nobody else yet. Send the link above.'); e.style.padding = '0 8px'; list.appendChild(e); }
+    if (!JOIN_CODE) {
+      box.appendChild(mk('div', 'menu-sep'));
+      if (this.others().length) {
+        const s = mk('button', 'menu-item', 'Bring everyone to my view'); s.onclick = () => { this.summon(); closePops(); }; box.appendChild(s);
+        if (activeBoard) { const d = mk('button', 'menu-item', 'Disconnect for now'); d.onclick = () => { this.disconnectAll(); closePops(); toast('Disconnected. Their link still works next time.'); }; box.appendChild(d); }
+      }
+      if (!activeBoard && this.adhoc) { const e = mk('button', 'menu-item danger', 'End one-time session'); e.onclick = () => { this.endAdhoc(); closePops(); toast('Session ended. That link no longer works.'); }; box.appendChild(e); }
+    } else {
+      box.appendChild(mk('div', 'menu-sep'));
+      const e = mk('button', 'menu-item danger', 'Leave session'); e.onclick = () => { location.href = location.pathname; }; box.appendChild(e);
+    }
+  }
+};
+async function copyText(text, btn) {
+  try { await navigator.clipboard.writeText(text); if (btn) { const o = btn.textContent; btn.textContent = 'Copied!'; setTimeout(() => btn.textContent = o, 1500); } else toast('Link copied'); }
+  catch { toast('Couldn’t copy automatically. Select the link and press Ctrl+C.'); }
+}
+$('#nameInput').addEventListener('input', e => { Live.name = e.target.value.slice(0, 24); store.set('mb.name', Live.name); Live.pushPresence(); Live.renderChip(); });
+$('#nameInput').addEventListener('keydown', e => e.stopPropagation());
+
+/* ---------- students popover ---------- */
+function promptModal(title, value, okLabel) {
+  return new Promise(res => {
+    const m = $('#modal'); m.innerHTML = '';
+    const h = document.createElement('h3'); h.textContent = title;
+    const inp = document.createElement('input'); inp.className = 'field'; inp.value = value || ''; inp.maxLength = 40; inp.style.margin = '6px 0 16px';
+    const row = document.createElement('div'); row.className = 'row';
+    const c = document.createElement('button'); c.className = 'btn'; c.textContent = 'Cancel';
+    const o = document.createElement('button'); o.className = 'btn primary'; o.textContent = okLabel || 'Save';
+    row.append(c, o); m.append(h, inp, row); $('#modalWrap').classList.add('open');
+    const done = v => { $('#modalWrap').classList.remove('open'); res(v); };
+    c.onclick = () => done(null); o.onclick = () => done(inp.value.trim() || null);
+    inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') o.click(); if (e.key === 'Escape') c.click(); };
+    setTimeout(() => { inp.focus(); inp.select(); }, 0);
+  });
+}
+const QR_URL = window.MB_QR || 'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js';
+let qrP = null;
+function loadQr() { if (qrP) return qrP; qrP = new Promise((res, rej) => { if (window.qrcode) return res(window.qrcode); const sc = document.createElement('script'); sc.src = QR_URL; sc.onload = () => window.qrcode ? res(window.qrcode) : (qrP = null, rej()); sc.onerror = () => { qrP = null; rej(); }; document.head.appendChild(sc); }); return qrP; }
+async function showPairing() {
+  const url = `${baseUrl()}#pair-${TUTOR_CODE}`;
+  const m = $('#modal'); m.innerHTML = '';
+  const h = document.createElement('h3'); h.textContent = 'Use your boards on another device';
+  const p = document.createElement('p'); p.textContent = 'Scan this with your iPad’s camera (or open the link on it). That device will share your student list from then on. Students added on either device show up on both.';
+  const qr = document.createElement('div'); qr.style.cssText = 'display:grid;place-items:center;background:#fff;border-radius:12px;padding:12px;margin:0 auto 12px;width:max-content;min-height:60px;color:#1d2330';
+  qr.textContent = 'Loading…';
+  const row = document.createElement('div'); row.className = 'row';
+  const inp = document.createElement('input'); inp.className = 'field'; inp.readOnly = true; inp.value = url; inp.style.cssText = 'padding:6px 8px;font-size:12.5px'; inp.onfocus = () => inp.select();
+  const cp = document.createElement('button'); cp.className = 'mini'; cp.textContent = 'Copy'; cp.onclick = () => copyText(url, cp);
+  row.append(inp, cp);
+  const row2 = document.createElement('div'); row2.className = 'row'; row2.style.marginTop = '14px';
+  const done = document.createElement('button'); done.className = 'btn primary'; done.textContent = 'Done'; done.onclick = () => $('#modalWrap').classList.remove('open');
+  const sp = document.createElement('span'); sp.className = 'spacer'; row2.append(sp, done);
+  const warn = document.createElement('div'); warn.className = 'hint'; warn.textContent = 'Only scan this on your own devices. Anyone with this code can see your student list.';
+  m.append(h, p, qr, row, warn, row2); $('#modalWrap').classList.add('open');
+  try { const Q = await loadQr(); const q = Q(0, 'M'); q.addData(url); q.make(); qr.innerHTML = q.createSvgTag({ cellSize: 5, margin: 2, scalable: false }); }
+  catch { qr.textContent = 'Couldn’t draw the QR code. Use the link below.'; }
+}
+async function handlePairing() {
+  if (!PAIR_CODE || JOIN_CODE) return;
+  try { history.replaceState(null, '', location.pathname); } catch {}
+  if (PAIR_CODE === TUTOR_CODE) { toast('This device is already linked.', 3000); return; }
+  const ok = await ask('Link this device?', 'This device will share your student list with your other device. Students already on this device are kept and added to the shared list.', 'Link device');
+  if (!ok) return;
+  store.set('mb.tutorCode', PAIR_CODE);
+  location.replace(location.pathname);
+}
+function renderStudentsPop() {
+  const box = $('#studentsBody'); box.innerHTML = '';
+  const mk = (tag, cls, txt) => { const e = document.createElement(tag); if (cls) e.className = cls; if (txt != null) e.textContent = txt; return e; };
+  const online = new Set([...Live.conns.values()].map(c => c.s));
+  const waiting = new Set([...Live.pending.values()].map(c => c.s));
+  const row = (key, name) => {
+    const r = mk('div', 'stu-row' + (key === activeBoard ? ' on' : ''));
+    const main = mk('button', 'stu-main');
+    const dot = mk('span', 'stu-dot' + (online.has(key) ? ' live' : waiting.has(key) ? ' wait' : ''));
+    dot.title = online.has(key) ? 'Connected now' : waiting.has(key) ? 'Waiting to join' : '';
+    const nm = mk('span', 'stu-name', name);
+    const txt = mk('span', 'stu-txt'); txt.appendChild(nm);
+    if (key) { const u = mk('span', 'stu-url', Students.link(key).replace(/^https?:\/\//, '')); txt.appendChild(u); }
+    main.append(dot, txt);
+    if (key === activeBoard) main.appendChild(mk('span', 'k', 'open'));
+    else main.appendChild(mk('span', 'k go', key ? 'Join' : 'Open'));
+    main.onclick = () => { closePops(); if (key !== activeBoard) switchBoard(key).then(() => toast(key ? `You’re on ${boardName(key)}’s board. They join with their link.` : 'Opened My board', 3500)); };
+    r.appendChild(main);
+    if (key) {
+      const cp = mk('button', 'mini', 'Copy link'); cp.onclick = () => copyText(Students.link(key), cp);
+      const more = mk('button', 'ibtn', '⋯'); more.title = 'Rename or remove';
+      more.onclick = async () => {
+        const choice = await choose(name, 'Rename this student, or remove them along with their saved board.', [['rename', 'Rename'], ['remove', 'Remove']]);
+        if (choice === 'rename') { const n = await promptModal('Rename student', name); if (n) { Students.rename(key, n); updateBoardChip(); Live.refreshPeers(); } }
+        if (choice === 'remove' && await ask(`Remove ${name}?`, 'Their saved board is deleted and their link stops working. Download it as a PDF first if you want a copy.', 'Remove', true)) {
+          if (activeBoard === key) await switchBoard(null);
+          for (const [id, c] of [...Live.conns]) if (c.s === key) { try { c.conn.close(); } catch {} }
+          for (const [id, c] of [...Live.pending]) if (c.s === key) { try { c.conn.close(); } catch {} Live.pending.delete(id); }
+          Students.remove(key); Live.ensureHost(); Live.renderNotice(); toast(`${name} removed`);
+        }
+      };
+      r.append(cp, more);
+    }
+    box.appendChild(r);
+  };
+  box.appendChild(mk('div', 'menu-label', 'Students'));
+  if (!Students.list.length) { const e = mk('div', 'hint', 'No students yet. Add one below to get their link.'); e.style.padding = '0 10px'; box.appendChild(e); }
+  for (const s of [...Students.list].sort((a, b) => a.name.localeCompare(b.name))) row(s.key, s.name);
+  box.appendChild(mk('div', 'menu-sep'));
+  row(null, 'My board (practice / prep)');
+  const add = mk('div', 'row'); add.style.padding = '8px 6px 4px';
+  const inp = mk('input', 'field'); inp.placeholder = 'Student name'; inp.maxLength = 40; inp.style.padding = '7px 9px';
+  const ab = mk('button', 'btn primary', 'Add');
+  const doAdd = async () => {
+    const n = inp.value.trim(); if (!n) { inp.focus(); return; }
+    const s = Students.add(n); Live.ensureHost();
+    closePops(); await switchBoard(s.key);
+    copyText(Students.link(s.key));
+    toast(`Added ${s.name}. Their link is copied. Paste it into an email to them.`, 5500);
+  };
+  ab.onclick = doAdd; inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') doAdd(); };
+  add.append(inp, ab); box.appendChild(add);
+  const others = Live.others();
+  if (others.length) {
+    box.appendChild(mk('div', 'menu-sep'));
+    box.appendChild(mk('div', 'menu-label', 'Here now'));
+    for (const pr of others) {
+      const rw = mk('div', 'peer-row'); const dt = mk('span', 'pdot'); dt.style.background = Live.peerColor(pr);
+      const fb = mk('button', 'mini', Live.following === pr.peer ? 'Unfollow' : 'Follow their view');
+      fb.onclick = () => { Live.following === pr.peer ? Live.unfollow() : Live.follow(pr.peer); renderStudentsPop(); };
+      rw.append(dt, mk('span', null, Live.displayName(pr)), fb); box.appendChild(rw);
+    }
+    const sm = mk('button', 'menu-item', 'Bring everyone to my view'); sm.onclick = () => { Live.summon(); closePops(); }; box.appendChild(sm);
+  }
+  box.appendChild(mk('div', 'menu-sep'));
+  if (Live.adhoc) {
+    box.appendChild(mk('div', 'menu-label', 'One-time link (My board)'));
+    const lr = mk('div', 'row'); lr.style.padding = '0 6px 4px';
+    const li = mk('input', 'field'); li.readOnly = true; li.value = adhocLink(); li.style.cssText = 'padding:6px 8px;font-size:12.5px'; li.onfocus = () => li.select();
+    const lc = mk('button', 'mini', 'Copy'); lc.onclick = () => copyText(li.value, lc);
+    const le = mk('button', 'mini', 'End'); le.onclick = () => { Live.endAdhoc(); renderStudentsPop(); toast('One-time link turned off'); };
+    lr.append(li, lc, le); box.appendChild(lr);
+  } else {
+    const ob = mk('button', 'menu-item', 'One-time link for someone not on your list');
+    ob.onclick = async () => { Live.startAdhoc(); await new Promise(r => setTimeout(r, 50)); copyText(adhocLink()); renderStudentsPop(); toast('One-time link copied. It opens My board until you end it.', 4500); };
+    box.appendChild(ob);
+  }
+  box.appendChild(mk('div', 'menu-sep'));
+  const lk = mk('button', 'menu-item', TutorSync.linkedCount() ? `Link another device (${TutorSync.linkedCount()} linked now)` : 'Use on another device (iPad, laptop…)');
+  lk.onclick = () => { closePops(); showPairing(); };
+  box.appendChild(lk);
+  const h = mk('div', 'hint', 'Each student has their own board and one short link. Email it to them once. You both open the same link: on this device it opens their board for you, and on theirs it joins you. They connect whenever you have their board open.');
+  h.style.padding = '4px 10px 2px'; box.appendChild(h);
+}
+
+/* ---------- peers' cursors & lasers ---------- */
+function renderPeers() {
+  overlayG.innerHTML = '';
+  const lg = $('#peerLaser') || el('g', { id: 'peerLaser' }, world); lg.innerHTML = '';
+  for (const p of Live.others()) {
+    const pr = p.presence || {}, col = Live.peerColor(p);
+    const las = pr.las;
+    if (las && las.p === curPage && Array.isArray(las.pts) && las.pts.length > 1 && las.pts.length <= 40 && las.pts.every(q => Array.isArray(q) && isNum(q[0]) && isNum(q[1]))) drawLaser(lg, las.pts, '#ff3b3b');
+    const c = pr.cur;
+    if (!c || c.p !== curPage || !isNum(c.x) || !isNum(c.y)) continue;
+    const x = c.x * V.z + V.tx, y = c.y * V.z + V.ty;
+    const g = el('g', { transform: `translate(${x.toFixed(1)} ${y.toFixed(1)})`, opacity: Date.now() - p.updatedAt > 20000 ? .45 : 1 }, overlayG);
+    el('path', { d: 'M0 0L0 15.5L4.3 11.6L7.2 18L9.8 16.8L7 10.6L12.6 10.4Z', fill: col, stroke: '#fff', 'stroke-width': 1.4, 'stroke-linejoin': 'round' }, g);
+    const name = Live.displayName(p);
+    const t = el('text', { x: 16, y: 29, 'font-size': 12, 'font-weight': 600, fill: '#fff', 'font-family': 'DM Sans, sans-serif' });
+    t.textContent = name;
+    el('rect', { x: 11, y: 16, width: name.length * 7 + 12, height: 19, rx: 6, fill: col }, g); g.appendChild(t);
+  }
+}
+
+/* =========================================================
+   Boot
+   ========================================================= */
+async function loadBoard() {
+  let saved = await idb.get(BOARD_KEY);
+  if (!saved) { const ls = store.get(BOARD_KEY, null); if (ls) { saved = ls; idb.set(BOARD_KEY, ls).then(ok => { if (ok) try { localStorage.removeItem(BOARD_KEY); } catch {} }); } }
+  if (saved && Array.isArray(saved.recs)) {
+    for (const r of saved.recs) if (validRec(r, true) && isNum(r.v)) { recs.set(r.id, r); clockV = Math.max(clockV, r.v); if (r.z > lastZ && r.k === 'item') lastZ = r.z; }
+    if (saved.views && typeof saved.views === 'object') Object.assign(views, saved.views);
+  }
+  ensurePage();
+  const ps = pages();
+  curPage = saved && ps.find(p => p.id === saved.cur) ? saved.cur : ps[0].id;
+  V = views[curPage] ? { ...views[curPage] } : null;
+}
+function rerenderAll() { fnCache.clear(); renderPage(); if (mathEdit) mathPreview(); }
+
+if (window.MathJax && MathJax.tex2svg) mathReady = true;
+buildPatterns();
+setTool('pen'); updateUndoUI(); updateBoardChip();
+(async () => {
+  await loadBoard();
+  applySheet(); if (!V) V = defaultView();
+  renderPage(); applyView(true); updatePageUI(); updateUndoUI(); syncAddressBar();
+  Live.init(); handlePairing();
+})();
+window.addEventListener('resize', () => { applyView(true); });
+
+window.addEventListener('mathjax-ready', () => { mathReady = true; rerenderAll(); });
+
+if (window.math) fnCache.clear();
+
+
+if (JOIN_CODE && JOIN_KEY) setTimeout(() => toast('Joining your tutor’s live board…', 3000), 400);
+else if (!store.get('mb.seen', false)) {
+  store.set('mb.seen', true);
+  setTimeout(() => toast('Tip: drag a PDF worksheet onto the board to add its pages. Press ? for shortcuts.', 5000), 800);
+}
+</script>
+</body>
+</html>
