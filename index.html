@@ -872,7 +872,18 @@ function buildEl(r) {
     case 'math': g = mathEl(r); break;
     case 'graph': g = graphEl(r); break;
     case 'numline': g = numlineEl(r); break;
-    case 'image': g = el('image', { href: r.src, x: r.x, y: r.y, width: r.w, height: r.h, preserveAspectRatio: 'none' }); break;
+    case 'image': {
+      const im = el('image', { href: r.src, x: r.x, y: r.y, width: r.w, height: r.h, preserveAspectRatio: 'none' });
+      if (Array.isArray(r.holes) && r.holes.length) {
+        g = el('g');
+        const mid = 'hm-' + r.id + '-' + Math.random().toString(36).slice(2, 6);
+        const mk = el('mask', { id: mid, maskUnits: 'userSpaceOnUse', x: r.x - 2, y: r.y - 2, width: r.w + 4, height: r.h + 4 }, el('defs', null, g));
+        el('rect', { x: r.x - 2, y: r.y - 2, width: r.w + 4, height: r.h + 4, fill: 'white' }, mk);
+        for (const h of r.holes) el('path', { d: smoothPath(h.pts), fill: 'none', stroke: 'black', 'stroke-width': h.w, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, mk);
+        im.setAttribute('mask', `url(#${mid})`); g.appendChild(im);
+      } else g = im;
+      break;
+    }
     default: g = el('g');
   }
   if (r.rot && Array.isArray(r.rc)) { const w = el('g'); g.setAttribute('transform', `rotate(${r.rot} ${r.rc[0]} ${r.rc[1]})`); w.appendChild(g); g = w; }
@@ -1006,7 +1017,7 @@ function updateSelBar() {
   const cb = contentBox(imgs.map(r => r.id)); if (!cb) { bar.classList.remove('show'); return; }
   const allEr = imgs.every(r => r.er);
   $('#eraseLockBtn').innerHTML = allEr
-    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>Eraser can remove this · Protect'
+    ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>Eraser can erase this page · Protect'
     : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>Protected from eraser · Allow erasing';
   bar.classList.add('show');
   const b = board.getBoundingClientRect();
@@ -1114,7 +1125,7 @@ function onDown(e) {
       action = { kind: 'draw', hl, pressure: !hl && e.pointerType === 'pen', pts: [pt], el: null };
       drawTemp(); break;
     }
-    case 'eraser': action = { kind: 'erase', path: [[p.x, p.y]], r: ERASER_R[S.esize], hits: new Set(), whole: new Set() }; eraseAt(p); break;
+    case 'eraser': action = { kind: 'erase', path: [[p.x, p.y]], r: ERASER_R[S.esize], hits: new Set(), whole: new Set(), imgs: new Set() }; eraseAt(p); break;
     case 'laser': action = { kind: 'laser' }; Laser.add(p); break;
     case 'shape': action = { kind: 'shape', t: S.shape, x1: p.x, y1: p.y, x2: p.x, y2: p.y }; break;
     case 'text': {
@@ -1225,6 +1236,14 @@ function onUp(e) {
     case 'erase': {
       const list = [];
       for (const id of a.whole) { const r = recs.get(id); if (r) list.push(Object.assign(clone(r), { del: 1 })); }
+      for (const id of a.imgs) {
+        const r = recs.get(id); if (!r) continue;
+        let pts = a.path.map(q => [q[0], q[1]]);
+        if (r.rot && Array.isArray(r.rc)) pts = pts.map(q => rotPt(q[0], q[1], r.rc[0], r.rc[1], -r.rot));
+        pts = rdp(pts, .8).map(q => [rd(q[0]), rd(q[1])]);
+        const n = clone(r); n.holes = (Array.isArray(r.holes) ? r.holes : []).concat([{ w: rd(a.r * 2), pts }]).slice(-300);
+        list.push(n);
+      }
       for (const id of a.hits) {
         const r = recs.get(id); if (!r || a.whole.has(id)) continue;
         const pieces = splitStroke(r, a.path, a.r); if (!pieces) continue;
@@ -1292,6 +1311,7 @@ function translated(r, dx, dy) {
   if ('x1' in n) { n.x1 = rd(n.x1 + dx); n.y1 = rd(n.y1 + dy); n.x2 = rd(n.x2 + dx); n.y2 = rd(n.y2 + dy); }
   if ('x' in n) { n.x = rd(n.x + dx); n.y = rd(n.y + dy); }
   if (Array.isArray(n.rc)) n.rc = [rd(n.rc[0] + dx), rd(n.rc[1] + dy)];
+  if (Array.isArray(n.holes)) n.holes = n.holes.map(h => ({ w: h.w, pts: h.pts.map(q => [rd(q[0] + dx), rd(q[1] + dy)]) }));
   return n;
 }
 function rotPt(x, y, cx, cy, deg) { const a = deg * Math.PI / 180, c = Math.cos(a), s2 = Math.sin(a), dx = x - cx, dy = y - cy; return [cx + dx * c - dy * s2, cy + dx * s2 + dy * c]; }
@@ -1319,7 +1339,7 @@ function previewResize(a, p) {
   const nw = Math.max(30, b.w + (p.x - a.sx)), nh = Math.max(30, b.h + (p.y - a.sy));
   if (r.t === 'graph') { r.w = rd(Math.max(140, r.w + p.x - a.sx)); r.h = rd(Math.max(120, r.h + p.y - a.sy)); }
   else if (r.t === 'numline') { r.w = rd(Math.max(140, r.w + p.x - a.sx)); }
-  else if (r.t === 'image') { const k = nw / b.w; r.w = rd(a.r.w * k); r.h = rd(a.r.h * k); }
+  else if (r.t === 'image') { const k = nw / b.w; r.w = rd(a.r.w * k); r.h = rd(a.r.h * k); if (Array.isArray(a.r.holes)) r.holes = a.r.holes.map(h => ({ w: rd(h.w * k), pts: h.pts.map(q => [rd(r.x + (q[0] - r.x) * k), rd(r.y + (q[1] - r.y) * k)]) })); }
   else if (r.t === 'math' || r.t === 'text') { const k = Math.max(nw / b.w, .2); r.size = Math.round(clamp(a.r.size * k, 8, 240)); }
   if (r.rot && (r.t === 'image' || r.t === 'graph')) r.rc = [rd(r.x + r.w / 2), rd(r.y + r.h / 2)];
   return r;
@@ -1368,7 +1388,9 @@ function eraseAt(p) {
       const q = { x: s0[0] + (p.x - s0[0]) * k / steps, y: s0[1] + (p.y - s0[1]) * k / steps };
       if (r.t === 'stroke') {
         if (polyDist(q.x, q.y, r.pts) <= a.r + r.w / 2) { a.hits.add(id); g.setAttribute('mask', 'url(#eraseMask)'); break; }
-      } else if (!(ERASE_SKIP.has(r.t) && !(r.t === 'image' && r.er))) {
+      } else if (r.t === 'image' && r.er) {
+        if (hitsItem(r, q, a.r, true)) { a.imgs.add(id); g.setAttribute('mask', 'url(#eraseMask)'); break; }
+      } else if (!ERASE_SKIP.has(r.t)) {
         if (hitsItem(r, q, a.r, true)) { a.whole.add(id); g.setAttribute('opacity', '.2'); break; }
       }
     }
@@ -2013,7 +2035,7 @@ $('#eraseLockBtn').onclick = () => {
   const imgs = [...selection].map(id => recs.get(id)).filter(r => r && r.t === 'image'); if (!imgs.length) return;
   const make = !imgs.every(r => r.er);
   commit(imgs.map(r => { const n = clone(r); if (make) n.er = 1; else delete n.er; return n; }));
-  toast(make ? 'The eraser can now remove this page image.' : 'Protected — the eraser won’t remove it.');
+  toast(make ? 'The eraser can now erase parts of this page.' : 'Protected. The eraser won’t touch it.');
 };
 
 
@@ -2401,7 +2423,7 @@ function validRec(r, fromFile) {
     case 'math': if (!(isNum(r.x) && isNum(r.y) && isNum(r.size) && isStr(r.tex, 1500))) return false; r.tex = sanitizeTex(r.tex); return true;
     case 'graph': return ['x', 'y', 'w', 'h', 'xmin', 'xmax', 'ymin', 'ymax'].every(k => isNum(r[k])) && Array.isArray(r.fns) && r.fns.length <= 8 && r.fns.every(f => f && isStr(f.e, 200) && COLORS[f.c]);
     case 'numline': return ['x', 'y', 'w', 'min', 'max', 'step'].every(k => isNum(r[k])) && (r.marks === undefined || isStr(r.marks, 200));
-    case 'image': if (r.fn !== undefined && !isStr(r.fn, 80)) return false; if (r.pn !== undefined && !isNum(r.pn)) return false; return isNum(r.x) && isNum(r.y) && isNum(r.w) && isNum(r.h) && typeof r.src === 'string' && r.src.length < 6e6 && /^data:image\/(png|jpeg|gif|webp);base64,/.test(r.src);
+    case 'image': if (r.holes !== undefined && !(Array.isArray(r.holes) && r.holes.length <= 300 && r.holes.every(h => h && isNum(h.w) && Array.isArray(h.pts) && h.pts.length > 0 && h.pts.length <= 3000 && h.pts.every(q => Array.isArray(q) && isNum(q[0]) && isNum(q[1]))))) return false; if (r.fn !== undefined && !isStr(r.fn, 80)) return false; if (r.pn !== undefined && !isNum(r.pn)) return false; return isNum(r.x) && isNum(r.y) && isNum(r.w) && isNum(r.h) && typeof r.src === 'string' && r.src.length < 6e6 && /^data:image\/(png|jpeg|gif|webp);base64,/.test(r.src);
   }
   return false;
 }
