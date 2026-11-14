@@ -296,7 +296,7 @@ body.student-locked #pageLabel{pointer-events:none}
   <button class="ibtn" id="zoomOut" data-tip="Zoom out" data-key="−"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
   <button class="ibtn" id="zoomLabel" data-tip="Reset to 100%">100%</button>
   <button class="ibtn" id="zoomIn" data-tip="Zoom in" data-key="+"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
-  <button class="ibtn" id="zoomFit" data-tip="Fit page" data-key="Shift 1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  <button class="ibtn" id="zoomFit" data-tip="Fit page / fit width" data-key="Shift 1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
 </div>
 
 <!-- Board menu -->
@@ -903,7 +903,7 @@ function applySheet() {
   for (const id of ['bgRect', 'patRect', 'sheetClipRect']) { const e = $('#' + id); e.setAttribute('width', w); e.setAttribute('height', h); }
   const sh = $('#sheetShadow'); sh.setAttribute('x', 4); sh.setAttribute('y', 6); sh.setAttribute('width', w); sh.setAttribute('height', h);
 }
-function viewArea() { const b = board.getBoundingClientRect(); const top = topbarBottom(), dk = $('#toolbar'), bottom = dk ? Math.max(14, Math.round(b.height - dk.getBoundingClientRect().top) + 8 + 78) : 64, left = 14, right = 14; return { b, x: left, y: top, w: Math.max(100, b.width - left - right), h: Math.max(100, b.height - top - bottom) }; }
+function viewArea() { const b = board.getBoundingClientRect(); const top = topbarBottom() - 4, dk = $('#toolbar'), bottom = dk ? Math.max(14, Math.round(b.height - dk.getBoundingClientRect().top) + 6) : 64, left = 8, right = 8; return { b, x: left, y: top, w: Math.max(100, b.width - left - right), h: Math.max(100, b.height - top - bottom) }; }
 function topbarBottom() {
   const tb = $('#topbar'), btm = tb ? Math.round(tb.getBoundingClientRect().bottom) + 10 : 64;
   document.documentElement.style.setProperty('--tb', btm + 'px');
@@ -945,7 +945,11 @@ function contentBox(ids) {
   for (const id of ids) { const b = bbox(id); if (!b) continue; x1 = Math.min(x1, b.x); y1 = Math.min(y1, b.y); x2 = Math.max(x2, b.x + b.w); y2 = Math.max(y2, b.y + b.h); }
   return isFinite(x1) ? { x: x1, y: y1, w: x2 - x1, h: y2 - y1 } : null;
 }
-function fitContent() { V = fitView(); applyView(); }
+function fitContent() {
+  const fv = fitView(), wv = fitWidthView();
+  const atPage = Math.abs(V.z - fv.z) < .005 * fv.z;
+  V = atPage && wv.z > fv.z * 1.02 ? wv : fv; applyView();
+}
 function defaultView() { const { w, h } = sheet(); return h / w > 1.6 ? fitWidthView() : fitView(); }
 
 /* =========================================================
