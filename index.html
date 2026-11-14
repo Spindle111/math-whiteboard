@@ -541,7 +541,7 @@ let pagesDirty = false, sheetDirty = false;
 
 function putRecords(list, broadcast = true) {
   for (const r of list) { r.v = ++clockV; r.a = ACTOR; applyRec(r); }
-  if (broadcast) Live.send(list);
+  if (broadcast) { Live.send(list); Cloud.write(list); }
   afterChange();
 }
 
@@ -1812,7 +1812,10 @@ async function importPdf(file) {
       const cv = document.createElement('canvas'); cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
       const ctx = cv.getContext('2d'); ctx.fillStyle = '#fff'; ctx.fillRect(0, 0, cv.width, cv.height);
       await page.render({ canvasContext: ctx, viewport: vp }).promise;
-      shots.push({ src: cv.toDataURL('image/jpeg', .82), ar: cv.height / cv.width, pn: n });
+      let src = cv.toDataURL('image/jpeg', .82), q = .82, cvs = cv;
+      while (src.length > 900000 && q > .45) { q -= .12; src = cvs.toDataURL('image/jpeg', q); }
+      while (src.length > 900000 && cvs.width > 600) { const c2 = document.createElement('canvas'); c2.width = Math.round(cvs.width * .8); c2.height = Math.round(cvs.height * .8); c2.getContext('2d').drawImage(cvs, 0, 0, c2.width, c2.height); cvs = c2; src = cvs.toDataURL('image/jpeg', .7); }
+      shots.push({ src, ar: cv.height / cv.width, pn: n });
       page.cleanup();
     }
     doc.destroy();
@@ -2413,6 +2416,109 @@ const TUTOR_CODE = (() => { let c = store.get('mb.tutorCode', null); if (!(typeo
 const baseUrl = () => location.origin + location.pathname;
 
 /* ---------- students (tutor side) ---------- */
+/* =========================================================
+   Online saving (Firebase Firestore): every board and the student
+   list are kept online, so all devices see the latest version.
+   ========================================================= */
+const FIREBASE_CONFIG = {
+  apiKey: "AIzaSyAG3ZXUkMf6nTKCZMyw30-TScbwa97IkFU",
+  authDomain: "math-whiteboard-56c6b.firebaseapp.com",
+  projectId: "math-whiteboard-56c6b",
+  storageBucket: "math-whiteboard-56c6b.firebasestorage.app",
+  messagingSenderId: "100277737171",
+  appId: "1:100277737171:web:4112b7716f0abf5b1da626"
+};
+const FB_BASE = window.MB_FB_BASE || 'https://www.gstatic.com/firebasejs/10.12.2/';
+const Cloud = {
+  ok: false, db: null, F: null, boardId: null, unsubBoard: null, unsubTutor: null, firstSnap: false,
+  pending: new Map(), pendingBoard: null, flushT: 0, warned: false,
+  async init() {
+    try {
+      const [A, Au, Fs] = await Promise.all([import(FB_BASE + 'firebase-app.js'), import(FB_BASE + 'firebase-auth.js'), import(FB_BASE + 'firebase-firestore.js')]);
+      const app = A.initializeApp(FIREBASE_CONFIG);
+      await Au.signInAnonymously(Au.getAuth(app));
+      this.db = Fs.getFirestore(app); this.F = Fs; this.ok = true;
+      this.openBoard();
+      if (!JOIN_CODE) this.openTutor();
+    } catch (e) { console.warn('Online saving unavailable', e); }
+  },
+  currentBoardId() { return JOIN_CODE || activeBoard || ('my' + TUTOR_CODE); },
+  openBoard() {
+    if (!this.ok) return;
+    const id = this.currentBoardId();
+    if (id === this.boardId && this.unsubBoard) return;
+    if (this.unsubBoard) { try { this.unsubBoard(); } catch {} }
+    this.boardId = id; this.firstSnap = false;
+    const F = this.F;
+    this.unsubBoard = F.onSnapshot(F.collection(this.db, 'boards', id, 'recs'), snap => {
+      if (this.boardId !== id) return;
+      let any = false;
+      for (const ch of snap.docChanges()) {
+        if (ch.type === 'removed') continue;
+        let r; try { r = JSON.parse(ch.doc.data().j); } catch { continue; }
+        if (validRec(r, false) && applyRec(r)) any = true;
+      }
+      if (any) { afterChange(); if (Live.syncHostPage) Live.syncHostPage(); }
+      if (!this.firstSnap) {
+        this.firstSnap = true;
+        const cloud = new Map();
+        snap.docs.forEach(d => { try { const r = JSON.parse(d.data().j); cloud.set(r.id, r); } catch {} });
+        const up = [...recs.values()].filter(r => { const c = cloud.get(r.id); return !c || newer(r, c); });
+        if (up.length) this.write(up);
+      }
+    }, err => this.fail(err));
+  },
+  write(list) {
+    if (!this.ok || !list || !list.length) return;
+    const id = this.boardId || this.currentBoardId();
+    if (this.pendingBoard && this.pendingBoard !== id) this.flushNow();
+    this.pendingBoard = id;
+    for (const r of list) this.pending.set(r.id, r);
+    clearTimeout(this.flushT); this.flushT = setTimeout(() => this.flushNow(), 500);
+  },
+  flushNow() {
+    clearTimeout(this.flushT);
+    if (!this.ok || !this.pending.size) return Promise.resolve();
+    const F = this.F, id = this.pendingBoard, items = [...this.pending.values()];
+    this.pending.clear();
+    const commits = []; let batch = F.writeBatch(this.db), n = 0, size = 0;
+    for (const r0 of items) {
+      const j = JSON.stringify(r0.del ? stripDel(r0) : r0);
+      if (j.length > 1040000) continue;
+      if (n && (n >= 400 || size + j.length > 7.5e6)) { commits.push(batch.commit()); batch = F.writeBatch(this.db); n = 0; size = 0; }
+      batch.set(F.doc(this.db, 'boards', id, 'recs', r0.id), { j }); n++; size += j.length;
+    }
+    if (n) commits.push(batch.commit());
+    return Promise.all(commits).catch(err => this.fail(err));
+  },
+  openTutor() {
+    const F = this.F, ref = F.doc(this.db, 'tutors', TUTOR_CODE);
+    this.unsubTutor = F.onSnapshot(ref, snap => {
+      let cloudJ = null;
+      if (snap.exists()) {
+        cloudJ = snap.data().j; let d; try { d = JSON.parse(cloudJ); } catch { d = null; }
+        if (d && Students.merge(d.list, d.removed)) {
+          if (activeBoard && !Students.get(activeBoard)) switchBoard(null);
+          updateBoardChip(); Live.ensureHost();
+          if ($('#studentsPop').classList.contains('open')) renderStudentsPop();
+        }
+      }
+      if (cloudJ !== this.studentsJ()) this.pushStudents();
+    }, err => this.fail(err));
+  },
+  studentsJ() { return JSON.stringify({ list: Students.list, removed: Students.removed.slice(-200) }); },
+  pushStudents() {
+    if (!this.ok) return;
+    const F = this.F;
+    F.setDoc(F.doc(this.db, 'tutors', TUTOR_CODE), { j: this.studentsJ() }).catch(err => this.fail(err));
+  },
+  fail(err) {
+    console.warn('Online saving error', err);
+    if (!this.warned) { this.warned = true; toast('Couldn’t save online just now. Your work is still saved on this device.', 4500); }
+  },
+};
+window.addEventListener('pagehide', () => { Cloud.flushNow(); });
+
 const okStu = x => x && typeof x.key === 'string' && /^[a-z0-9]{6,16}$/.test(x.key) && typeof x.name === 'string' && x.name.length <= 40;
 const Students = {
   list: (store.get('mb.students', []) || []).filter(okStu),
@@ -2481,7 +2587,7 @@ const TutorSync = {
     if (this.role === 'host' && changed) { const m = this.payload(); for (const [id, c] of this.conns) if (id !== from && c.open) try { c.send(m); } catch {} }
     if (this.role === 'host' && from !== 'host') { const c = this.conns.get(from); if (c && c.open) try { c.send(this.payload()); } catch {} }
   },
-  push() { const m = this.payload(); if (this.role === 'host') { for (const c of this.conns.values()) if (c.open) try { c.send(m); } catch {} } else if (this.hostConn && this.hostConn.open) try { this.hostConn.send(m); } catch {} },
+  push() { Cloud.pushStudents(); const m = this.payload(); if (this.role === 'host') { for (const c of this.conns.values()) if (c.open) try { c.send(m); } catch {} } else if (this.hostConn && this.hostConn.open) try { this.hostConn.send(m); } catch {} },
   linkedCount() { return this.role === 'host' ? this.conns.size : this.hostConn ? 1 : 0; },
 };
 let activeBoard = (() => {
@@ -2504,7 +2610,7 @@ async function switchBoard(key) {
   if (key === activeBoard) return;
   switching = (async () => {
     closeEditors(); closePops(); clearSelection();
-    clearTimeout(saveT); await saveLocal();
+    clearTimeout(saveT); await saveLocal(); await Cloud.flushNow();
     Live.beforeSwitch(key);
     activeBoard = key; store.set('mb.activeBoard', key);
     BOARD_KEY = key ? 'mb.board.s.' + key : 'mb.board';
@@ -2512,7 +2618,7 @@ async function switchBoard(key) {
     await loadBoard();
     applySheet(); if (!V) V = defaultView();
     renderPage(); applyView(true); updatePageUI(); updateUndoUI(); updateBoardChip(); syncAddressBar();
-    Live.afterSwitch(key);
+    Live.afterSwitch(key); Cloud.openBoard();
   })();
   await switching; switching = null;
 }
@@ -2638,7 +2744,8 @@ const Live = {
     this.connecting = true;
     const c = this.peer.connect('mtb-' + this.code, { reliable: true, metadata: { s: this.code } });
     const t = setTimeout(() => { if (!c.open) { this.connecting = false; try { c.close(); } catch {} this.retry(); } }, 12000);
-    c.on('open', () => { clearTimeout(t); this.connecting = false; this.hostConn = c; this.status = 'knocking'; this.renderChip(); });
+    this.connAttempt = c;
+    c.on('open', () => { clearTimeout(t); this.connecting = false; this.hostConn = c; if (this.status !== 'connected') this.status = 'knocking'; this.renderChip(); });
     c.on('data', d => this.onData(d, 'host'));
     c.on('close', () => {
       clearTimeout(t); this.connecting = false;
@@ -2657,14 +2764,19 @@ const Live = {
     if (from === 'host') {
       if (d.type === 'denied') { this.status = 'denied'; this.renderChip(); this.renderPop(); toast('This link isn’t active anymore — ask your tutor for a new one.', 6000); return; }
       if (d.type === 'wait') { this.status = 'admit'; this.renderChip(); this.renderPop(); toast('Your tutor will let you in shortly…', 4000); return; }
-      if (d.type === 'welcome') { this.status = 'connected'; this.connected = true; try { this.hostConn.send({ type: 'state', r: fullRecs() }); } catch {} this.presDirty = true; this.flushPres(); this.renderChip(); this.renderPop(); toast(this.tutorClient ? 'Synced with your other device' : 'Connected to the live board'); return; }
+      if (d.type === 'welcome') { if (!this.hostConn && this.connAttempt) this.hostConn = this.connAttempt; this.connecting = false; this.status = 'connected'; this.connected = true; try { this.hostConn.send({ type: 'state', r: fullRecs() }); } catch {} this.presDirty = true; this.flushPres(); this.renderChip(); this.renderPop(); toast(this.tutorClient ? 'Synced with your other device' : 'Connected to the live board'); return; }
       if (d.type === 'bye') { this.status = 'switched'; this.connected = false; this.renderChip(); if (!this.tutorClient) toast('Your tutor stepped away from your board — you’ll reconnect when they’re back.', 5000); return; }
     }
     if (d.type === 'state' || d.type === 'op') {
       if (!Array.isArray(d.r) || d.r.length > 20000) return;
+      if (from === 'host' && this.role === 'student' && this.status !== 'connected') {
+        if (!this.hostConn && this.connAttempt) this.hostConn = this.connAttempt;
+        this.connecting = false; this.status = 'connected'; this.connected = true; this.presDirty = true; this.renderChip();
+        if (d.type === 'state') try { this.hostConn.send({ type: 'state', r: fullRecs() }); } catch {}
+      }
       const ok = [];
       for (const r of d.r) if (validRec(r, false) && applyRec(r)) ok.push(r);
-      if (ok.length) { afterChange(); this.syncHostPage(); if (this.role === 'host') this.broadcast({ type: 'op', r: ok }, from); }
+      if (ok.length) { afterChange(); this.syncHostPage(); if (this.role === 'host') { this.broadcast({ type: 'op', r: ok }, from); Cloud.write(ok); } }
       return;
     }
     if (d.type === 'pres') {
@@ -2987,7 +3099,7 @@ setTool('pen'); updateUndoUI(); updateBoardChip();
   await loadBoard();
   applySheet(); if (!V) V = defaultView();
   renderPage(); applyView(true); updatePageUI(); updateUndoUI(); syncAddressBar();
-  Live.init(); handlePairing();
+  Live.init(); handlePairing(); Cloud.init();
 })();
 window.addEventListener('resize', () => { applyView(true); });
 
