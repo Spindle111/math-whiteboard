@@ -178,6 +178,8 @@ input.field{-webkit-user-select:text;user-select:text}
 #selTrash.show{display:grid}
 #selTrash svg{width:16px;height:16px}
 #selTrash:hover{background:#e03131;color:#fff;border-color:#e03131}
+body.student-locked #prevPage,body.student-locked #nextPage,body.student-locked #addPage{display:none}
+body.student-locked #pageLabel{pointer-events:none}
 /* modal */
 #modalWrap{position:fixed;inset:0;background:rgba(15,20,30,.35);display:none;place-items:center;z-index:60}
 #modalWrap.open{display:grid}
@@ -963,7 +965,8 @@ function updatePageUI() {
   $('#prevPage').disabled = i <= 0;
   $('#nextPage').disabled = i >= ps.length - 1;
 }
-function stepPage(d) { const ps = pages(), i = ps.findIndex(p => p.id === curPage); const n = ps[i + d]; if (n) goPage(n.id); }
+function stepPage(d) {
+  if (Live.isLockedStudent && Live.isLockedStudent()) return; const ps = pages(), i = ps.findIndex(p => p.id === curPage); const n = ps[i + d]; if (n) goPage(n.id); }
 function addPage(afterCopy) {
   const ps = pages(), i = ps.findIndex(p => p.id === curPage);
   const a = ps[i] ? ps[i].z : 0, b = ps[i + 1] ? ps[i + 1].z : a + 2000;
@@ -2211,6 +2214,7 @@ document.addEventListener('keydown', e => {
   if (e.key === ' ') { if (!spaceDown) { spaceDown = true; board.classList.add('panning'); } e.preventDefault(); return; }
   if (e.key === 'Delete' || e.key === 'Backspace') { deleteSel(); return; }
   if (e.key === 'Escape') { closePops(); closeEditors(); clearSelection(); updateStylebar(); return; }
+  if ((e.key === 'PageUp' || e.key === 'PageDown') && Live.isLockedStudent && Live.isLockedStudent()) return;
   if (e.key === 'PageUp') { stepPage(-1); return; }
   if (e.key === 'PageDown') { stepPage(1); return; }
   if (e.key === '!' || (e.shiftKey && e.code === 'Digit1')) { fitContent(); return; }
@@ -2773,7 +2777,7 @@ const Live = {
       clearTimeout(t); this.connecting = false;
       if (this.hostConn !== c) return;
       const was = this.status;
-      this.hostConn = null; this.connected = false; this.presMap.clear();
+      this.hostConn = null; this.connected = false; this.presMap.clear(); this.viewSynced = false; document.body.classList.remove('student-locked');
       if (this.following) this.unfollow(true);
       if (this.tutorClient) { this.retakeHost(); return; }
       if (was !== 'denied') { this.status = 'waiting'; if (was === 'connected') toast('Lost connection to the tutor — reconnecting…', 3500); }
@@ -2786,7 +2790,7 @@ const Live = {
     if (from === 'host') {
       if (d.type === 'denied') { this.status = 'denied'; this.renderChip(); this.renderPop(); toast('This link isn’t active anymore — ask your tutor for a new one.', 6000); return; }
       if (d.type === 'wait') { this.status = 'admit'; this.renderChip(); this.renderPop(); toast('Your tutor will let you in shortly…', 4000); return; }
-      if (d.type === 'welcome') { if (!this.hostConn && this.connAttempt) this.hostConn = this.connAttempt; this.connecting = false; this.status = 'connected'; this.connected = true; try { this.hostConn.send({ type: 'state', r: fullRecs() }); } catch {} this.presDirty = true; this.flushPres(); this.renderChip(); this.renderPop(); toast(this.tutorClient ? 'Synced with your other device' : 'Connected to the live board'); return; }
+      if (d.type === 'welcome') { if (!this.hostConn && this.connAttempt) this.hostConn = this.connAttempt; this.connecting = false; this.status = 'connected'; this.connected = true; try { this.hostConn.send({ type: 'state', r: fullRecs() }); } catch {} this.presDirty = true; this.flushPres(); this.renderChip(); this.renderPop(); toast(this.tutorClient ? 'Synced with your other device' : 'Connected to the live board'); this.syncHostPage(); return; }
       if (d.type === 'bye') { this.status = 'switched'; this.connected = false; this.renderChip(); if (!this.tutorClient) toast('Your tutor stepped away from your board — you’ll reconnect when they’re back.', 5000); return; }
     }
     if (d.type === 'state' || d.type === 'op') {
@@ -2837,11 +2841,16 @@ const Live = {
   viewChanged() { if (this.myPres) this.setPres({ view: this.viewObj() }); },
   cursor(p) { this.setPres({ cur: p ? { x: rd(p.x), y: rd(p.y), p: curPage } : null }); },
   laser(pts) { this.setPres({ las: pts ? { pts, p: curPage } : null }); },
+  isLockedStudent() { return !!JOIN_CODE && this.role === 'student' && !this.tutorClient && this.status === 'connected'; },
   syncHostPage() {
-    if (this.role !== 'student' || !this.followPage || this.following) return;
-    const h = this.presMap.get('mtb-' + this.code), p = h && h.pres && h.pres.view && h.pres.view.p;
-    if (!isStr(p, 48) || p === this.lastHostPage) return;
+    document.body.classList.toggle('student-locked', this.isLockedStudent());
+    if (this.role !== 'student' || this.following) return;
+    const h = this.presMap.get('mtb-' + this.code), v = h && h.pres && h.pres.view, p = v && v.p;
+    if (!isStr(p, 48)) return;
     const pr = recs.get(p); if (!pr || pr.del) return;
+    const locked = this.isLockedStudent();
+    if (locked && !this.viewSynced && isNum(v.cx) && isNum(v.cy) && isNum(v.z)) { this.viewSynced = true; this.lastHostPage = p; this.jumpTo(v); return; }
+    if (!locked && (!this.followPage || p === this.lastHostPage)) return;
     this.lastHostPage = p;
     if (p !== curPage) goPage(p);
   },
