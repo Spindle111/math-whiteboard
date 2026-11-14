@@ -957,7 +957,7 @@ function goPage(id, silent) {
   curPage = id;
   applySheet();
   V = views[id] ? { ...views[id] } : defaultView();
-  renderPage(); applyView(true); updatePageUI(); Live.viewChanged();
+  renderPage(); applyView(true); updatePageUI(); Live.viewChanged(); if (typeof LiveInk !== 'undefined') LiveInk.redraw();
 }
 function updatePageUI() {
   const ps = pages(), i = ps.findIndex(p => p.id === curPage);
@@ -1125,8 +1125,8 @@ function onDown(e) {
     case 'pen': case 'hl': {
       const hl = S.tool === 'hl';
       const pt = [rd(p.x), rd(p.y)]; if (!hl && e.pointerType === 'pen') pt.push(Math.round((e.pressure || .5) * 100) / 100);
-      action = { kind: 'draw', hl, pressure: !hl && e.pointerType === 'pen', pts: [pt], el: null };
-      drawTemp(); break;
+      action = { kind: 'draw', hl, pressure: !hl && e.pointerType === 'pen', pts: [pt], el: null, liveId: uid(), sent: 0 };
+      drawTemp(); LiveInk.queue(action); break;
     }
     case 'eraser': action = { kind: 'erase', path: [[p.x, p.y]], r: ERASER_R[S.esize], hits: new Set(), whole: new Set(), imgs: new Set() }; eraseAt(p); break;
     case 'laser': action = { kind: 'laser' }; Laser.add(p); break;
@@ -1183,7 +1183,7 @@ function onMove(e) {
         const pt = [rd(q.x), rd(q.y)]; if (action.pressure) pt.push(Math.round((ce.pressure || .5) * 100) / 100);
         action.pts.push(pt);
       }
-      drawTemp(); break;
+      drawTemp(); LiveInk.queue(action); break;
     }
     case 'erase': eraseAt(p); break;
     case 'laser': Laser.add(p); break;
@@ -1234,7 +1234,7 @@ function onUp(e) {
     case 'draw': {
       const base = { k: 'item', del: 0, page: curPage, t: 'stroke', c: a.hl ? S.hl : S.color, w: (a.hl ? HL_W : PEN_W)[S.size] };
       if (a.hl) base.hl = 1;
-      commit(finalizeStroke(base, a.pts)); break;
+      LiveInk.flush(a); commit(finalizeStroke(base, a.pts)); LiveInk.end(a); break;
     }
     case 'erase': {
       const list = [];
@@ -1293,6 +1293,7 @@ function cancelAction() {
   if (!action) return;
   if (action.kind === 'move' || action.kind === 'rotate') { for (const id of selection) elems.get(id)?.removeAttribute('transform'); selG.removeAttribute('transform'); }
   if (action.kind === 'erase') resetEraseView();
+  if (action.kind === 'draw') LiveInk.end(action);
   if (action.kind === 'resize') renderItem(recs.get(action.r.id));
   if (action.kind === 'laser') Laser.end();
   action = null; tempG.innerHTML = '';
@@ -2811,10 +2812,19 @@ const Live = {
       else if (from === 'host' && typeof d.peer === 'string' && d.peer !== this.me) this.presMap.set(d.peer, { pres: d.pres, t: Date.now() });
       this.refreshPeers(); return;
     }
+    if (d.type === 'ink' || d.type === 'inkEnd') {
+      if (this.role === 'host') { if (!this.conns.has(from)) return; d.from = from; this.broadcast(d, from); }
+      LiveInk.receive(d, this.role === 'host' ? from : (typeof d.from === 'string' ? d.from : 'host')); return;
+    }
     if (from !== 'host') return;
     if (d.type === 'presAll' && Array.isArray(d.list)) { for (const [k, p] of d.list) if (typeof k === 'string' && k !== this.me && p && typeof p === 'object') this.presMap.set(k, { pres: p, t: Date.now() }); this.refreshPeers(); }
     else if (d.type === 'left' && typeof d.peer === 'string') { this.presMap.delete(d.peer); if (this.following === d.peer) this.unfollow(true); this.refreshPeers(); }
     else if (d.type === 'summon' && d.v) { const v = d.v; if (isNum(v.cx) && isNum(v.cy) && isNum(v.z) && isStr(v.p, 48)) { this.jumpTo(v); toast('Your tutor brought you to their view'); } }
+  },
+  sendRaw(msg) {
+    if (!this.connected) return;
+    if (this.role === 'host') this.broadcast(msg);
+    else if (this.hostConn && this.hostConn.open && this.status === 'connected') try { this.hostConn.send(msg); } catch {}
   },
   send(list) {
     if (!this.connected) return;
@@ -3087,6 +3097,41 @@ function renderStudentsPop() {
 }
 
 /* ---------- peers' cursors & lasers ---------- */
+/* strokes appear for everyone while they're being drawn */
+const LiveInk = {
+  strokes: new Map(), pending: null, timer: 0, layer: null,
+  g() { if (!this.layer) { this.layer = el('g', { id: 'liveInk' }); world.insertBefore(this.layer, tempG); } return this.layer; },
+  queue(a) { if (!Live.connected) return; this.pending = a; if (!this.timer) this.timer = setTimeout(() => { this.timer = 0; this.flush(this.pending); }, 40); },
+  flush(a) {
+    if (!a || !Live.connected || a.sent >= a.pts.length) return;
+    const pts = a.pts.slice(a.sent);
+    Live.sendRaw({ type: 'ink', k: a.liveId, p: curPage, c: a.hl ? S.hl : S.color, w: (a.hl ? HL_W : PEN_W)[S.size], hl: a.hl ? 1 : 0, s: a.sent, pts });
+    a.sent = a.pts.length;
+  },
+  end(a) { clearTimeout(this.timer); this.timer = 0; this.pending = null; if (a && a.sent > 0) Live.sendRaw({ type: 'inkEnd', k: a.liveId }); },
+  receive(d, who) {
+    if (typeof d.k !== 'string' || d.k.length > 40) return;
+    const key = who + ':' + d.k;
+    if (d.type === 'inkEnd') { const st = this.strokes.get(key); if (st) { st.el && st.el.remove(); this.strokes.delete(key); } return; }
+    if (!isStr(d.p, 48) || !Array.isArray(d.pts) || d.pts.length > 3000 || !isNum(d.w) || d.w > 200 || (!COLORS[d.c] && !isHex(d.c))) return;
+    if (!d.pts.every(q => Array.isArray(q) && isNum(q[0]) && isNum(q[1]))) return;
+    let st = this.strokes.get(key);
+    if (!st) { st = { pts: [], c: d.c, w: d.w, hl: d.hl ? 1 : 0, p: d.p, el: null }; this.strokes.set(key, st); }
+    st.pts.push(...d.pts.map(q => q.length > 2 && isNum(q[2]) ? [q[0], q[1], q[2]] : [q[0], q[1]]));
+    if (st.pts.length > 20000) st.pts = st.pts.slice(-20000);
+    st.t = Date.now();
+    this.draw(st);
+  },
+  draw(st) {
+    if (st.el) st.el.remove(); st.el = null;
+    if (st.p !== curPage || !st.pts.length) return;
+    st.el = strokeEl({ t: 'stroke', pts: st.pts, c: st.c, w: st.w, hl: st.hl });
+    this.g().appendChild(st.el);
+  },
+  redraw() { for (const st of this.strokes.values()) this.draw(st); },
+  sweep() { const now = Date.now(); for (const [k, st] of this.strokes) if (now - (st.t || 0) > 8000) { st.el && st.el.remove(); this.strokes.delete(k); } },
+};
+setInterval(() => LiveInk.sweep(), 3000);
 function renderPeers() {
   overlayG.innerHTML = '';
   const lg = $('#peerLaser') || el('g', { id: 'peerLaser' }, world); lg.innerHTML = '';
