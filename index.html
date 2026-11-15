@@ -193,14 +193,14 @@ body.student-locked #pageLabel{pointer-events:none}
 #pagePop.open{display:flex}
 .pane-head{display:flex;align-items:center;justify-content:space-between;padding:0 2px 6px}
 .pane-head b{font-size:13px}
-#pageList{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-content:start;gap:10px;padding:6px 2px 8px;flex:1;min-height:0;overflow:auto}
+#pageList{display:grid;grid-template-columns:minmax(0,1fr);align-content:start;gap:10px;padding:6px 2px 8px;flex:1;min-height:0;overflow:auto}
 .pthumb{min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px;border-radius:10px;font-size:12px;color:var(--muted)}
 .pthumb:hover{background:var(--panel-2)}
-.pthumb .pimg{width:100%;aspect-ratio:4/3;border-radius:6px;border:1px solid var(--line);background:var(--bgc,#223a2f) center/contain no-repeat;overflow:hidden;display:grid;place-items:center}
+.pthumb .pimg{width:100%;min-height:60px;border-radius:6px;border:1px solid var(--line);background:var(--bgc,#223a2f) center/contain no-repeat;overflow:hidden;display:grid;place-items:center}
 .pthumb .pimg{position:relative}
-.pthumb .pimg img{max-width:100%;max-height:100%;display:block}
-.ptrash{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;background:#d64545;color:#fff;display:none;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.35)}
-.ptrash svg{width:14px;height:14px}
+.pthumb .pimg img{width:100%;height:auto;display:block}
+.ptrash{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:34px;height:34px;border-radius:50%;background:#d64545;color:#fff;display:none;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.ptrash svg{width:18px;height:18px}
 .pthumb:hover .ptrash{display:grid}
 @media (hover:none){.pthumb.on .ptrash{display:grid}}
 .pthumb.on{color:var(--accent);font-weight:600}
@@ -2181,7 +2181,7 @@ function pageThumbURL(pid) {
   if (hit && hit.key === key) return hit.url;
   if (hit) URL.revokeObjectURL(hit.url);
   let url = '';
-  try { const sv = pageSVGFor(pid, .2); url = URL.createObjectURL(new Blob([sv.svg], { type: 'image/svg+xml' })); } catch (e) {}
+  try { const sv = pageSVGFor(pid, .35); url = URL.createObjectURL(new Blob([sv.svg], { type: 'image/svg+xml' })); } catch (e) {}
   thumbCache.set(pid, { key, url }); return url;
 }
 function buildPageList(scroll) {
