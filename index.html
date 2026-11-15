@@ -180,6 +180,9 @@ input.field{-webkit-user-select:text;user-select:text}
 #selTrash:hover{background:#e03131;color:#fff;border-color:#e03131}
 body.student-locked #prevPage,body.student-locked #nextPage,body.student-locked #addPage{display:none}
 body.student-locked #pageLabel{pointer-events:none}
+#toolbar .ibtn{height:40px;min-width:40px;border-radius:10px}
+#toolbar .pagelabel{min-width:58px;padding:0 6px}
+@media (max-width:640px){#toolbar{flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 16px)}}
 /* modal */
 #modalWrap{position:fixed;inset:0;background:rgba(15,20,30,.35);display:none;place-items:center;z-index:60}
 #modalWrap.open{display:grid}
@@ -257,16 +260,6 @@ body.student-locked #pageLabel{pointer-events:none}
     </button>
   </div>
   <div class="panel group">
-    <button class="ibtn" id="undoBtn" data-tip="Undo" data-key="Ctrl Z"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
-    <button class="ibtn" id="redoBtn" data-tip="Redo" data-key="Ctrl Shift Z"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
-  </div>
-  <div class="panel group">
-    <button class="ibtn" id="prevPage" data-tip="Previous page" data-key="PgUp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
-    <button class="ibtn pagelabel" id="pageLabel" data-tip="Click to jump to a page">1 / 1</button>
-    <button class="ibtn" id="nextPage" data-tip="Next page" data-key="PgDn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
-    <button class="ibtn" id="addPage" data-tip="New page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
-  </div>
-  <div class="panel group">
     <button class="ibtn" id="boardChip" data-tip="Students & their links"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 20a6.5 6.5 0 0 0-3-5.5"/></svg><span id="boardChipText">My board</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:14px;height:14px;opacity:.6"><path d="M6 9l6 6 6-6"/></svg></button>
   </div>
   <div class="spacer"></div>
@@ -284,6 +277,14 @@ body.student-locked #pageLabel{pointer-events:none}
   <div class="tsep"></div>
   <button class="tbtn" data-tool="shape" id="shapeBtn" data-tip="Shapes" data-key="L A R O"><span id="shapeIcon"></span><span class="more"></span></button>
   <button class="tbtn" data-tool="text" data-tip="Text" data-key="T"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7V5h14v2M12 5v14M9 19h6"/></svg></button>
+  <div class="tsep"></div>
+  <button class="ibtn" id="undoBtn" data-tip="Undo" data-key="Ctrl Z"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+  <button class="ibtn" id="redoBtn" data-tip="Redo" data-key="Ctrl Shift Z"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+  <div class="tsep"></div>
+  <button class="ibtn" id="prevPage" data-tip="Previous page" data-key="PgUp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+  <button class="ibtn pagelabel" id="pageLabel" data-tip="Click to jump to a page">1 / 1</button>
+  <button class="ibtn" id="nextPage" data-tip="Next page" data-key="PgDn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+  <button class="ibtn" id="addPage" data-tip="New page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
 </nav>
 <div id="stylebar" class="panel">
   <div id="swatches" style="display:flex;gap:2px"></div>
@@ -2098,7 +2099,8 @@ function openPop(pop, anchor, alignRight) {
   pop.classList.add('open');
   const r = anchor.getBoundingClientRect();
   let x = alignRight ? r.right - pop.offsetWidth : r.left;
-  pop.style.left = clamp(x, 8, innerWidth - pop.offsetWidth - 8) + 'px'; pop.style.top = (r.bottom + 8) + 'px';
+  pop.style.left = clamp(x, 8, innerWidth - pop.offsetWidth - 8) + 'px';
+  pop.style.top = (r.top > innerHeight / 2 ? Math.max(8, r.top - pop.offsetHeight - 8) : r.bottom + 8) + 'px';
 }
 function closePops() { $$('.pop').forEach(p => p.classList.remove('open')); $('#shapeFly').classList.remove('open'); }
 document.addEventListener('pointerdown', e => {
