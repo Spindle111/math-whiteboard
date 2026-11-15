@@ -189,8 +189,12 @@ body.student-locked #pageLabel{pointer-events:none}
 #toolbar .ibtn{height:40px;min-width:40px;border-radius:10px}
 #toolbar .pagelabel{min-width:58px;padding:0 6px}
 @media (max-width:640px){#toolbar{flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 16px)}}
-#pageList{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:6px 4px 8px;max-height:min(55vh,440px);overflow:auto}
-.pthumb{display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px;border-radius:10px;font-size:12px;color:var(--muted)}
+#pagePop{position:fixed;top:52px;right:0;bottom:0;width:260px;border-radius:0;border-width:0 0 0 1px;box-shadow:none;display:none;flex-direction:column;padding:8px 10px 10px;z-index:18}
+#pagePop.open{display:flex}
+.pane-head{display:flex;align-items:center;justify-content:space-between;padding:0 2px 6px}
+.pane-head b{font-size:13px}
+#pageList{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);align-content:start;gap:10px;padding:6px 2px 8px;flex:1;min-height:0;overflow:auto}
+.pthumb{min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px;border-radius:10px;font-size:12px;color:var(--muted)}
 .pthumb:hover{background:var(--panel-2)}
 .pthumb .pimg{width:100%;aspect-ratio:4/3;border-radius:6px;border:1px solid var(--line);background:var(--bgc,#223a2f) center/contain no-repeat;overflow:hidden;display:grid;place-items:center}
 .pthumb .pimg img{max-width:100%;max-height:100%;display:block}
@@ -322,7 +326,8 @@ body.student-locked #pageLabel{pointer-events:none}
 </div>
 
 <!-- Pages menu -->
-<div class="pop panel" id="pagePop" style="width:300px">
+<aside class="panel" id="pagePop">
+  <div class="pane-head"><b>Pages</b><button class="ibtn" id="paneClose" data-tip="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
   <div class="pagejump">Go to page <input class="field" id="pageJump" type="number" min="1"> <span id="pageJumpOf"></span></div>
   <div id="pageList"></div>
   <div class="menu-sep"></div>
@@ -331,7 +336,7 @@ body.student-locked #pageLabel{pointer-events:none}
   <div class="menu-sep"></div>
   <button class="menu-item" data-act="dupPage">Duplicate this page</button>
   <button class="menu-item danger" data-act="delPage">Delete this page</button>
-</div>
+</aside>
 
 <!-- Timer -->
 <div class="pop panel" id="timerPop" style="width:250px">
@@ -596,6 +601,7 @@ function ensurePage() {
 }
 
 function afterChange() {
+  refreshPagePane(false);
   if (sheetDirty) { sheetDirty = false; requestAnimationFrame(() => applyView(true)); }
   if (pagesDirty) {
     pagesDirty = false;
@@ -913,7 +919,8 @@ function applySheet() {
   for (const id of ['bgRect', 'patRect', 'sheetClipRect']) { const e = $('#' + id); e.setAttribute('width', w); e.setAttribute('height', h); }
   const sh = $('#sheetShadow'); sh.setAttribute('x', 4); sh.setAttribute('y', 6); sh.setAttribute('width', w); sh.setAttribute('height', h);
 }
-function viewArea() { const b = board.getBoundingClientRect(); const top = topbarBottom(), m = 8; return { b, x: m, y: top + m, w: Math.max(100, b.width - m * 2), h: Math.max(100, b.height - top - m * 2) }; }
+function paneWidth() { const p = $('#pagePop'); return p && p.classList.contains('open') && innerWidth > 700 ? p.offsetWidth : 0; }
+function viewArea() { const b = board.getBoundingClientRect(); const top = topbarBottom(), m = 8, pw = paneWidth(); return { b, x: m, y: top + m, w: Math.max(100, b.width - pw - m * 2), h: Math.max(100, b.height - top - m * 2) }; }
 function topbarBottom() {
   const tb = $('#bar'), btm = tb ? Math.round(tb.getBoundingClientRect().bottom) : 52;
   document.documentElement.style.setProperty('--tb', (btm + 10) + 'px');
@@ -999,7 +1006,7 @@ function goPage(id, silent) {
 }
 function updatePageUI() {
   const ps = pages(), i = ps.findIndex(p => p.id === curPage);
-  $('#pageLabel').textContent = `${i + 1} / ${ps.length}`;
+  $('#pageLabel').textContent = `${i + 1} / ${ps.length}`; refreshPagePane(true);
   $('#prevPage').disabled = i <= 0;
   $('#nextPage').dataset.tip = i >= ps.length - 1 ? 'New page' : 'Next page';
 }
@@ -2132,7 +2139,17 @@ document.addEventListener('pointerdown', e => {
   if (S.styleOpen && !e.target.closest('#stylebar,#toolbar,#gridPop')) { S.styleOpen = false; updateStylebar(); }
 }, true);
 $('#menuBtn').onclick = () => { buildMenuChips(); openPop($('#menuPop'), $('#menuBtn')); };
-$('#pageLabel').onclick = () => { buildPageList(); openPop($('#pagePop'), $('#pageLabel'), true); if ($('#pagePop').classList.contains('open')) setTimeout(() => { $('#pageJump').focus(); $('#pageJump').select(); }, 0); };
+function setPagePane(open) {
+  const p = $('#pagePop'); p.classList.toggle('open', open); store.set('pagePane', open ? 1 : 0);
+  $('#pageLabel').classList.toggle('on', open);
+  if (open) buildPageList(true);
+  requestAnimationFrame(() => applyView(true));
+}
+$('#pageLabel').onclick = () => setPagePane(!$('#pagePop').classList.contains('open'));
+$('#paneClose').onclick = () => setPagePane(false);
+var paneTimer = 0;
+function refreshPagePane(scroll) { if (!$('#pagePop').classList.contains('open')) return; clearTimeout(paneTimer); paneTimer = setTimeout(() => buildPageList(scroll), scroll ? 0 : 700); }
+if (store.get('pagePane', 0) && !JOIN_CODE) setTimeout(() => setPagePane(true), 0);
 $('#pageJump').addEventListener('keydown', e => {
   e.stopPropagation();
   if (e.key === 'Enter') { const ps = pages(), n = parseInt(e.target.value, 10); if (n >= 1 && n <= ps.length) { closePops(); goPage(ps[n - 1].id); } else toast(`Pick a page from 1 to ${ps.length}`); }
@@ -2168,9 +2185,9 @@ function pageThumbURL(pid) {
   try { const sv = pageSVGFor(pid, .2); url = URL.createObjectURL(new Blob([sv.svg], { type: 'image/svg+xml' })); } catch (e) {}
   thumbCache.set(pid, { key, url }); return url;
 }
-function buildPageList() {
+function buildPageList(scroll) {
   buildSheetChips();
-  const box = $('#pageList'); box.innerHTML = '';
+  const box = $('#pageList'), keep0 = box.scrollTop; box.innerHTML = '';
   const ps = pages();
   $('#pageJump').max = ps.length; $('#pageJump').value = ps.findIndex(p => p.id === curPage) + 1;
   $('#pageJumpOf').textContent = 'of ' + ps.length;
@@ -2180,11 +2197,12 @@ function buildPageList() {
     const box2 = document.createElement('div'); box2.className = 'pimg'; box2.style.background = T().bg;
     const lab = document.createElement('span'); lab.textContent = i + 1;
     b.append(box2, lab);
-    b.onclick = () => { closePops(); goPage(p.id); };
+    b.onclick = () => goPage(p.id);
     box.appendChild(b); if (p.id === curPage) cur = b;
     requestAnimationFrame(() => setTimeout(() => { const u = pageThumbURL(p.id); if (u) { const im = new Image(); im.src = u; im.alt = ''; box2.appendChild(im); } }, i * 15));
   });
-  if (cur) requestAnimationFrame(() => cur.scrollIntoView({ block: 'nearest' }));
+  const keep = keep0;
+  if (cur && scroll) requestAnimationFrame(() => cur.scrollIntoView({ block: 'nearest' })); else box.scrollTop = keep;
 }
 $('#menuPop').addEventListener('click', async e => {
   const a = e.target.closest('[data-act]'); if (!a) return; closePops();
