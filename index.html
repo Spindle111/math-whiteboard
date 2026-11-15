@@ -2685,7 +2685,7 @@ async function switchBoard(key) {
 }
 function updateBoardChip() {
   const c = $('#boardChip'); if (!c) return;
-  if (JOIN_CODE) { c.style.display = 'none'; return; }
+  if (JOIN_CODE) { (c.closest('.group') || c).style.display = 'none'; return; }
   $('#boardChipText').textContent = boardName(activeBoard);
 }
 
