@@ -992,7 +992,7 @@ function updatePageUI() {
   const ps = pages(), i = ps.findIndex(p => p.id === curPage);
   $('#pageLabel').textContent = `${i + 1} / ${ps.length}`;
   $('#prevPage').disabled = i <= 0;
-  $('#nextPage').disabled = i >= ps.length - 1;
+  $('#nextPage').dataset.tip = i >= ps.length - 1 ? 'New page' : 'Next page';
 }
 function stepPage(d) {
   if (Live.isLockedStudent && Live.isLockedStudent()) return; const ps = pages(), i = ps.findIndex(p => p.id === curPage); const n = ps[i + d]; if (n) goPage(n.id); }
@@ -2094,7 +2094,7 @@ document.addEventListener('pointerover', e => {
 document.addEventListener('pointerdown', () => tip.style.opacity = 0, true);
 
 $('#undoBtn').onclick = undo; $('#redoBtn').onclick = redo;
-$('#prevPage').onclick = () => stepPage(-1); $('#nextPage').onclick = () => stepPage(1);
+$('#prevPage').onclick = () => stepPage(-1); $('#nextPage').onclick = () => { if (Live.isLockedStudent && Live.isLockedStudent()) return; const ps = pages(); if (ps.findIndex(p => p.id === curPage) >= ps.length - 1) addPage(); else stepPage(1); };
 $('#addPage').onclick = () => addPage(false);
 $('#zoomIn').onclick = () => zoomAt(1.25); $('#zoomOut').onclick = () => zoomAt(.8);
 $('#zoomLabel').onclick = () => zoomAt(1 / V.z); $('#zoomFit').onclick = fitContent;
