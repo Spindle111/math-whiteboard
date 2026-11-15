@@ -2086,7 +2086,6 @@ document.addEventListener('pointerover', e => {
   const t = e.target.closest && e.target.closest('[data-tip]');
   if (!t || e.pointerType === 'touch') { tip.style.opacity = 0; return; }
   tip.innerHTML = ''; tip.append(t.dataset.tip);
-  if (t.dataset.key) { const k = document.createElement('kbd'); k.textContent = t.dataset.key; tip.appendChild(k); }
   const r = t.getBoundingClientRect(); tip.style.opacity = 1;
   const vertical = t.closest('#toolbar,#shapeFly');
   { tip.style.left = clamp(r.left + r.width / 2 - tip.offsetWidth / 2, 6, innerWidth - tip.offsetWidth - 6) + 'px'; tip.style.top = (r.bottom + 8 > innerHeight - 40 ? r.top - 34 : r.bottom + 8) + 'px'; }
