@@ -45,7 +45,7 @@ input,textarea,select{font:inherit;color:var(--text)}
 #bar .tbtn.on{background:var(--accent-soft);color:var(--accent)}
 .tbtn .cbar{position:absolute;left:11px;right:11px;bottom:4px;height:3px;border-radius:2px;pointer-events:none}
 #bar::-webkit-scrollbar{display:none}
-@media (max-width:1100px){#bar{display:flex}.bar-left,.bar-right,#toolbar{flex:none}.bar-right{margin-left:auto}}
+@media (max-width:1100px){#bar{display:flex}.bar-left,.bar-right,#toolbar{flex:none}#toolbar{margin:0 auto}}
 .group{display:flex;align-items:center;gap:2px;padding:4px;height:44px}
 .brand{display:flex;align-items:center;gap:8px;padding:0 12px 0 10px;font-weight:700;letter-spacing:-.01em;font-size:15px;white-space:nowrap}
 .brand-mark{width:24px;height:24px;border-radius:7px;background:var(--accent);display:grid;place-items:center;color:#fff;font-size:14px;font-weight:700}
@@ -272,11 +272,11 @@ body.student-locked #pageLabel{pointer-events:none}
     <div class="bsep"></div>
     <button class="tbtn" data-tool="shape" id="shapeBtn" data-tip="Shapes" data-key="L A R O"><span id="shapeIcon"></span><span class="more"></span></button>
     <button class="tbtn" data-tool="text" data-tip="Text" data-key="T"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7V5h14v2M12 5v14M9 19h6"/></svg></button>
+    <div class="bsep"></div>
+    <button class="ibtn" id="undoBtn" data-tip="Undo" data-key="Ctrl Z"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+        <button class="ibtn" id="redoBtn" data-tip="Redo" data-key="Ctrl Shift Z"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
   </nav>
   <div class="bar-right">
-    <button class="ibtn" id="undoBtn" data-tip="Undo" data-key="Ctrl Z"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
-    <button class="ibtn" id="redoBtn" data-tip="Redo" data-key="Ctrl Shift Z"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
-    <div class="bsep"></div>
     <button class="ibtn" id="zoomOut" data-tip="Zoom out" data-key="−"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
     <button class="ibtn" id="zoomLabel" data-tip="Reset to 100%">100%</button>
     <button class="ibtn" id="zoomIn" data-tip="Zoom in" data-key="+"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
