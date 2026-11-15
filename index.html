@@ -189,6 +189,13 @@ body.student-locked #pageLabel{pointer-events:none}
 #toolbar .ibtn{height:40px;min-width:40px;border-radius:10px}
 #toolbar .pagelabel{min-width:58px;padding:0 6px}
 @media (max-width:640px){#toolbar{flex-wrap:wrap;justify-content:center;max-width:calc(100vw - 16px)}}
+#pageList{display:grid;grid-template-columns:1fr 1fr;gap:10px;padding:6px 4px 8px;max-height:min(55vh,440px);overflow:auto}
+.pthumb{display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px;border-radius:10px;font-size:12px;color:var(--muted)}
+.pthumb:hover{background:var(--panel-2)}
+.pthumb .pimg{width:100%;aspect-ratio:4/3;border-radius:6px;border:1px solid var(--line);background:var(--bgc,#223a2f) center/contain no-repeat;overflow:hidden;display:grid;place-items:center}
+.pthumb .pimg img{max-width:100%;max-height:100%;display:block}
+.pthumb.on{color:var(--accent);font-weight:600}
+.pthumb.on .pimg{border:2px solid var(--accent)}
 /* modal */
 #modalWrap{position:fixed;inset:0;background:rgba(15,20,30,.35);display:none;place-items:center;z-index:60}
 #modalWrap.open{display:grid}
@@ -272,7 +279,7 @@ body.student-locked #pageLabel{pointer-events:none}
     <div class="bsep"></div>
     <button class="tbtn" data-tool="shape" id="shapeBtn" data-tip="Shapes" data-key="L A R O"><span id="shapeIcon"></span><span class="more"></span></button>
     <button class="tbtn" data-tool="text" data-tip="Text" data-key="T"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7V5h14v2M12 5v14M9 19h6"/></svg></button>
-    <button class="ibtn" id="uploadBtn" data-tip="Upload PDF"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg></button>
+    <button class="ibtn" id="uploadBtn" data-tip="Upload PDF or image"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15V4M7 9l5-5 5 5"/><path d="M4 15v4a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-4"/></svg></button>
     <div class="bsep"></div>
     <button class="ibtn" id="undoBtn" data-tip="Undo" data-key="Ctrl Z"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
         <button class="ibtn" id="redoBtn" data-tip="Redo" data-key="Ctrl Shift Z"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
@@ -315,9 +322,9 @@ body.student-locked #pageLabel{pointer-events:none}
 </div>
 
 <!-- Pages menu -->
-<div class="pop panel" id="pagePop" style="width:270px">
+<div class="pop panel" id="pagePop" style="width:300px">
   <div class="pagejump">Go to page <input class="field" id="pageJump" type="number" min="1"> <span id="pageJumpOf"></span></div>
-  <div id="pageList" style="max-height:min(50vh,360px);overflow:auto"></div>
+  <div id="pageList"></div>
   <div class="menu-sep"></div>
   <div class="menu-label">Page shape</div>
   <div class="chips" id="sheetChips"></div>
@@ -388,13 +395,13 @@ body.student-locked #pageLabel{pointer-events:none}
 
 <div id="modalWrap"><div id="modal" class="panel"></div></div>
 <div id="selBar" class="panel"><button class="ibtn" id="eraseLockBtn"></button></div>
-<div id="dropZone"><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 18v-6M9 15l3 3 3-3"/></svg><b>Drop your PDF here</b><span>Each page you pick goes on its own board page</span></div></div>
+<div id="dropZone"><div><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 18v-6M9 15l3 3 3-3"/></svg><b>Drop a PDF or image here</b><span>PDF pages each go on their own board page</span></div></div>
 <div class="pop panel" id="gridPop"><div class="cgrid" id="cgrid"></div><div class="crecent" id="crecent"></div></div>
 <button id="selTrash" title="Delete" aria-label="Delete selection"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
 <div id="toast"></div>
 <div id="syncing">Syncing board…</div>
 <div class="tip" id="tip"></div>
-<input type="file" id="imgFile" accept="application/pdf,.pdf" hidden>
+<input type="file" id="imgFile" accept="application/pdf,.pdf,image/*" hidden>
 <input type="file" id="boardFile" accept=".json,application/json" hidden>
 
 <script>
@@ -1912,7 +1919,10 @@ function insertImageFile(file, at) {
       const cw = Math.max(1, Math.round(img.width * k)), ch = Math.max(1, Math.round(img.height * k));
       const cv = document.createElement('canvas'); cv.width = cw; cv.height = ch;
       cv.getContext('2d').drawImage(img, 0, 0, cw, ch);
-      const src = file.type === 'image/png' && cw * ch < 700000 ? cv.toDataURL('image/png') : cv.toDataURL('image/jpeg', .86);
+      let src = file.type === 'image/png' && cw * ch < 700000 ? cv.toDataURL('image/png') : cv.toDataURL('image/jpeg', .86);
+      let q = .8, cvs = cv;
+      while (src.length > 900000 && q > .45) { src = cvs.toDataURL('image/jpeg', q); q -= .12; }
+      while (src.length > 900000 && cvs.width > 500) { const c2 = document.createElement('canvas'); c2.width = Math.round(cvs.width * .8); c2.height = Math.round(cvs.height * .8); c2.getContext('2d').drawImage(cvs, 0, 0, c2.width, c2.height); cvs = c2; src = cvs.toDataURL('image/jpeg', .7); }
       const c = at || viewCenter(), sz = sheet(); let dw = Math.min(560, cw, sz.w * .8), dh = dw * ch / cw; if (dh > sz.h * .8) { dh = sz.h * .8; dw = dh * cw / ch; }
       const r = { id: uid(), k: 'item', del: 0, page: curPage, z: nextZ(), t: 'image', x: rd(c.x - dw / 2), y: rd(c.y - dh / 2), w: rd(dw), h: rd(dh) , src };
       commit([r]); setTool('select'); selection.add(r.id); renderSelection();
@@ -1931,13 +1941,19 @@ window.addEventListener('dragleave', e => { if (!hasFiles(e)) return; dragDepth 
 window.addEventListener('drop', e => {
   if (!hasFiles(e)) return; e.preventDefault(); dragDepth = 0; $('#dropZone').classList.remove('show');
   const files = [...e.dataTransfer.files]; const f = files.find(isPdf);
-  if (f) importPdf(f); else if (files.length) toast('Drop a PDF file to add its pages.');
+  if (f) { importPdf(f); return; }
+  const imgs = files.filter(x => /^image\//.test(x.type));
+  if (!imgs.length) { if (files.length) toast('Drop a PDF or an image.'); return; }
+  const b = board.getBoundingClientRect();
+  imgs.forEach((x, i) => insertImageFile(x, { x: (e.clientX - b.left - V.tx) / V.z + i * 30, y: (e.clientY - b.top - V.ty) / V.z + i * 30 }));
 });
 document.addEventListener('paste', e => {
   if (document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
   const items = e.clipboardData ? [...e.clipboardData.items] : [];
   const pdf = items.find(i => i.type === 'application/pdf');
   if (pdf) { e.preventDefault(); importPdf(pdf.getAsFile()); return; }
+  const im = items.find(i => i.kind === 'file' && /^image\//.test(i.type));
+  if (im) { e.preventDefault(); insertImageFile(im.getAsFile()); return; }
   if (clipboardItems.length) { e.preventDefault(); pasteItems(); }
 });
 
@@ -2142,23 +2158,33 @@ function buildSheetChips() {
   }
   if (hasPdf) { const n = document.createElement('div'); n.className = 'hint'; n.style.cssText = 'margin:0;padding:0 4px;width:100%'; n.textContent = 'This page is sized to its PDF page.'; box.appendChild(n); }
 }
+const thumbCache = new Map();
+function pageThumbKey(pid) { let v = 0, n = 0; for (const r of recs.values()) if (r.page === pid || r.id === pid) { v = Math.max(v, r.v || 0); n++; } return [pid, v, n, S.theme, S.bg].join('|'); }
+function pageThumbURL(pid) {
+  const key = pageThumbKey(pid), hit = thumbCache.get(pid);
+  if (hit && hit.key === key) return hit.url;
+  if (hit) URL.revokeObjectURL(hit.url);
+  let url = '';
+  try { const sv = pageSVGFor(pid, .2); url = URL.createObjectURL(new Blob([sv.svg], { type: 'image/svg+xml' })); } catch (e) {}
+  thumbCache.set(pid, { key, url }); return url;
+}
 function buildPageList() {
   buildSheetChips();
   const box = $('#pageList'); box.innerHTML = '';
   const ps = pages();
   $('#pageJump').max = ps.length; $('#pageJump').value = ps.findIndex(p => p.id === curPage) + 1;
   $('#pageJumpOf').textContent = 'of ' + ps.length;
+  let cur = null;
   ps.forEach((p, i) => {
-    const its = pageItems(p.id), n = its.length, pdf = its.find(r => r.t === 'image' && r.pn);
-    const b = document.createElement('button'); b.className = 'menu-item' + (p.id === curPage ? ' on' : '');
-    const bb = document.createElement('b'); bb.style.minWidth = '52px'; bb.textContent = 'Page ' + (i + 1);
-    const k = document.createElement('span'); k.className = 'k'; k.style.cssText = 'overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:150px';
-    k.textContent = pdf ? `${pdf.fn || 'PDF'} · p.${pdf.pn}` : `${n} item${n === 1 ? '' : 's'}`;
-    b.append(bb, k);
-    if (p.id === curPage) b.style.background = 'var(--accent-soft)';
+    const b = document.createElement('button'); b.className = 'pthumb' + (p.id === curPage ? ' on' : '');
+    const box2 = document.createElement('div'); box2.className = 'pimg'; box2.style.background = T().bg;
+    const lab = document.createElement('span'); lab.textContent = i + 1;
+    b.append(box2, lab);
     b.onclick = () => { closePops(); goPage(p.id); };
-    box.appendChild(b);
+    box.appendChild(b); if (p.id === curPage) cur = b;
+    requestAnimationFrame(() => setTimeout(() => { const u = pageThumbURL(p.id); if (u) { const im = new Image(); im.src = u; im.alt = ''; box2.appendChild(im); } }, i * 15));
   });
+  if (cur) requestAnimationFrame(() => cur.scrollIntoView({ block: 'nearest' }));
 }
 $('#menuPop').addEventListener('click', async e => {
   const a = e.target.closest('[data-act]'); if (!a) return; closePops();
