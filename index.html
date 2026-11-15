@@ -35,8 +35,16 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;paddin
 input,textarea,select{font:inherit;color:var(--text)}
 
 /* top bar */
-#topbar{position:fixed;top:10px;left:10px;right:10px;display:flex;gap:8px;align-items:center;pointer-events:none;z-index:20}
-#topbar > *{pointer-events:auto}
+#bar{position:fixed;top:0;left:0;right:0;height:52px;display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;padding:0 8px;background:var(--panel);border-bottom:1px solid var(--line);z-index:20}
+.bar-left,.bar-right{display:flex;align-items:center;gap:2px;min-width:0}
+.bar-right{justify-content:flex-end}
+.bar-group{display:flex}
+.bsep{width:1px;height:22px;background:var(--line);margin:0 6px;flex:none}
+#bar .ibtn{height:38px;min-width:36px}
+#bar .tbtn{width:38px;height:38px}
+#bar .tbtn.on{background:var(--accent-soft);color:var(--accent)}
+.tbtn .cbar{position:absolute;left:11px;right:11px;bottom:4px;height:3px;border-radius:2px;pointer-events:none}
+@media (max-width:980px){#bar{display:flex;overflow-x:auto;scrollbar-width:none}#bar::-webkit-scrollbar{display:none}.bar-left,.bar-right,#toolbar{flex:none}.bar-right{margin-left:auto}}
 .group{display:flex;align-items:center;gap:2px;padding:4px;height:44px}
 .brand{display:flex;align-items:center;gap:8px;padding:0 12px 0 10px;font-weight:700;letter-spacing:-.01em;font-size:15px;white-space:nowrap}
 .brand-mark{width:24px;height:24px;border-radius:7px;background:var(--accent);display:grid;place-items:center;color:#fff;font-size:14px;font-weight:700}
@@ -57,8 +65,6 @@ input,textarea,select{font:inherit;color:var(--text)}
 .avatars span{width:20px;height:20px;border-radius:50%;border:2px solid var(--panel);margin-left:-6px;display:grid;place-items:center;font-size:10px;font-weight:700;color:#fff}
 
 /* left toolbar */
-#dock{position:fixed;left:50%;bottom:10px;transform:translateX(-50%);z-index:19;width:max-content}
-#dock #stylebar{position:absolute;left:50%;bottom:calc(100% + 6px);transform:translateX(-50%);white-space:nowrap}
 #toolbar{display:flex;flex-direction:row;align-items:center;gap:2px;padding:5px}
 #toolbar::-webkit-scrollbar{display:none}
 .tbtn{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;color:var(--text);position:relative}
@@ -73,8 +79,8 @@ input,textarea,select{font:inherit;color:var(--text)}
 #shapeFly.open{display:flex}
 
 /* style bar */
-#stylebar{display:flex;align-items:center;gap:4px;padding:6px 8px}
-#stylebar.hidden{visibility:hidden}
+#stylebar{position:fixed;z-index:30;display:none;align-items:center;gap:4px;padding:8px;white-space:nowrap}
+#stylebar.open{display:flex}
 .sw{width:26px;height:26px;border-radius:50%;border:2px solid transparent;display:grid;place-items:center}
 .sw i{width:18px;height:18px;border-radius:50%;display:block;box-shadow:inset 0 0 0 1px rgba(0,0,0,.12)}
 .sw.on{border-color:var(--accent)}
@@ -100,7 +106,6 @@ input,textarea,select{font:inherit;color:var(--text)}
 .sz i{display:block;border-radius:50%;background:var(--text)}
 
 /* zoom */
-#zoombar{position:fixed;right:10px;top:10px;height:44px;display:flex;align-items:center;gap:2px;padding:4px;z-index:20}
 #zoomLabel{font-size:12.5px;font-weight:600;min-width:48px;font-variant-numeric:tabular-nums}
 
 /* popovers */
@@ -225,10 +230,7 @@ body.student-locked #pageLabel{pointer-events:none}
   #stylebar{padding:5px 6px}
 }
 @media (max-width:720px){
-  #topbar{flex-wrap:wrap;row-gap:6px;top:8px;left:8px;right:8px}
-  #topbar .spacer{display:none}
   .group{height:40px}
-  #zoombar{display:none}
   .brand-text,.hide-sm{display:none}
   .editor{left:10px!important;right:10px;width:auto;top:auto!important;bottom:70px}
 }
@@ -252,53 +254,48 @@ body.student-locked #pageLabel{pointer-events:none}
   <g id="overlay"></g>
 </svg>
 
-<header id="topbar">
-  <div class="panel group">
-    <div class="brand"><div class="brand-mark"><svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4.5L16 4.5a2.1 2.1 0 0 1 3 3L8 18.5z"/></svg></div><span class="brand-text">This Board</span></div>
+<header id="bar">
+  <div class="bar-left">
     <button class="ibtn" id="menuBtn" data-tip="Board menu">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
     </button>
+    <div class="bar-group"><button class="ibtn" id="boardChip" data-tip="Students & their links"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 20a6.5 6.5 0 0 0-3-5.5"/></svg><span id="boardChipText">My board</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:14px;height:14px;opacity:.6"><path d="M6 9l6 6 6-6"/></svg></button></div>
+    <div class="bsep"></div>
+    <button class="ibtn" id="prevPage" data-tip="Previous page" data-key="PgUp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+    <button class="ibtn pagelabel" id="pageLabel" data-tip="Click to jump to a page">1 / 1</button>
+    <button class="ibtn" id="nextPage" data-tip="Next page" data-key="PgDn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+    <button class="ibtn" id="addPage" data-tip="New page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
   </div>
-  <div class="panel group">
-    <button class="ibtn" id="boardChip" data-tip="Students & their links"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7M18.5 20a6.5 6.5 0 0 0-3-5.5"/></svg><span id="boardChipText">My board</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" style="width:14px;height:14px;opacity:.6"><path d="M6 9l6 6 6-6"/></svg></button>
+  <nav id="toolbar">
+    <button class="tbtn" data-tool="select" data-tip="Select & move" data-key="V"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M5 3.5l13 6.5-5.6 1.8L10.6 17.5z"/><path d="M12.5 12l5 5" stroke-linecap="round"/></svg></button>
+    <button class="tbtn" data-tool="hand" data-tip="Pan" data-key="Space"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12.5V5.5a1.5 1.5 0 0 1 3 0V11"/><path d="M11 11V4a1.5 1.5 0 0 1 3 0v7"/><path d="M14 11V5.5a1.5 1.5 0 0 1 3 0V14a6.5 6.5 0 0 1-6.5 6.5h-.7a6 6 0 0 1-4.9-2.6L3.3 14.6a1.5 1.5 0 0 1 2.4-1.8L8 15.5"/></svg></button>
+    <div class="bsep"></div>
+    <button class="tbtn on" data-tool="pen" data-tip="Pen" data-key="P"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4.5L16 4.5a2.1 2.1 0 0 1 3 3L8 18.5z"/><path d="M14 6.5l3 3"/></svg><i class="cbar" id="penBar"></i></button>
+    <button class="tbtn" data-tool="hl" data-tip="Highlighter" data-key="H"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15l-4.5 4.5H10l1.5-1.5"/><path d="M8.5 14.5l8-10 4 3.2-8 10-4 .3z"/></svg><i class="cbar" id="hlBar"></i></button>
+    <button class="tbtn" data-tool="eraser" data-tip="Eraser (size: 1–4)" data-key="E"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 20h12"/><path d="M4.6 15.4l9.8-9.8a2 2 0 0 1 2.8 0l2.2 2.2a2 2 0 0 1 0 2.8L11 19H8.2z"/><path d="M9 11l5 5"/></svg></button>
+    <div class="bsep"></div>
+    <button class="tbtn" data-tool="shape" id="shapeBtn" data-tip="Shapes" data-key="L A R O"><span id="shapeIcon"></span><span class="more"></span></button>
+    <button class="tbtn" data-tool="text" data-tip="Text" data-key="T"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7V5h14v2M12 5v14M9 19h6"/></svg></button>
+  </nav>
+  <div class="bar-right">
+    <button class="ibtn" id="undoBtn" data-tip="Undo" data-key="Ctrl Z"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
+    <button class="ibtn" id="redoBtn" data-tip="Redo" data-key="Ctrl Shift Z"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
+    <div class="bsep"></div>
+    <button class="ibtn" id="zoomOut" data-tip="Zoom out" data-key="−"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
+    <button class="ibtn" id="zoomLabel" data-tip="Reset to 100%">100%</button>
+    <button class="ibtn" id="zoomIn" data-tip="Zoom in" data-key="+"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+    <button class="ibtn" id="zoomFit" data-tip="Fit page / fit width" data-key="Shift 1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
   </div>
-  <div class="spacer"></div>
 </header>
-
-<div id="shapeFly" class="panel"></div>
-<div id="dock">
-<nav id="toolbar" class="panel">
-  <button class="tbtn" data-tool="select" data-tip="Select & move" data-key="V"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M5 3.5l13 6.5-5.6 1.8L10.6 17.5z"/><path d="M12.5 12l5 5" stroke-linecap="round"/></svg></button>
-  <button class="tbtn" data-tool="hand" data-tip="Pan" data-key="Space"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12.5V5.5a1.5 1.5 0 0 1 3 0V11"/><path d="M11 11V4a1.5 1.5 0 0 1 3 0v7"/><path d="M14 11V5.5a1.5 1.5 0 0 1 3 0V14a6.5 6.5 0 0 1-6.5 6.5h-.7a6 6 0 0 1-4.9-2.6L3.3 14.6a1.5 1.5 0 0 1 2.4-1.8L8 15.5"/></svg></button>
-  <div class="tsep"></div>
-  <button class="tbtn on" data-tool="pen" data-tip="Pen" data-key="P"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4.5L16 4.5a2.1 2.1 0 0 1 3 3L8 18.5z"/><path d="M14 6.5l3 3"/></svg></button>
-  <button class="tbtn" data-tool="hl" data-tip="Highlighter" data-key="H"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15l-4.5 4.5H10l1.5-1.5"/><path d="M8.5 14.5l8-10 4 3.2-8 10-4 .3z"/></svg></button>
-  <button class="tbtn" data-tool="eraser" data-tip="Eraser (size: 1–4)" data-key="E"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M8 20h12"/><path d="M4.6 15.4l9.8-9.8a2 2 0 0 1 2.8 0l2.2 2.2a2 2 0 0 1 0 2.8L11 19H8.2z"/><path d="M9 11l5 5"/></svg></button>
-  <div class="tsep"></div>
-  <button class="tbtn" data-tool="shape" id="shapeBtn" data-tip="Shapes" data-key="L A R O"><span id="shapeIcon"></span><span class="more"></span></button>
-  <button class="tbtn" data-tool="text" data-tip="Text" data-key="T"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 7V5h14v2M12 5v14M9 19h6"/></svg></button>
-  <div class="tsep"></div>
-  <button class="ibtn" id="undoBtn" data-tip="Undo" data-key="Ctrl Z"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 14L4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 0 11H11"/></svg></button>
-  <button class="ibtn" id="redoBtn" data-tip="Redo" data-key="Ctrl Shift Z"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
-  <div class="tsep"></div>
-  <button class="ibtn" id="prevPage" data-tip="Previous page" data-key="PgUp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
-  <button class="ibtn pagelabel" id="pageLabel" data-tip="Click to jump to a page">1 / 1</button>
-  <button class="ibtn" id="nextPage" data-tip="Next page" data-key="PgDn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
-  <button class="ibtn" id="addPage" data-tip="New page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
-</nav>
 <div id="stylebar" class="panel">
   <div id="swatches" style="display:flex;gap:2px"></div>
   <div class="sep"></div>
   <div id="sizes" style="display:flex;gap:2px"></div>
 </div>
-</div>
 
-<div id="zoombar" class="panel">
-  <button class="ibtn" id="zoomOut" data-tip="Zoom out" data-key="−"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
-  <button class="ibtn" id="zoomLabel" data-tip="Reset to 100%">100%</button>
-  <button class="ibtn" id="zoomIn" data-tip="Zoom in" data-key="+"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
-  <button class="ibtn" id="zoomFit" data-tip="Fit page / fit width" data-key="Shift 1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
-</div>
+<div id="shapeFly" class="panel"></div>
+
+
 
 <!-- Board menu -->
 <div class="pop panel" id="menuPop">
@@ -907,10 +904,10 @@ function applySheet() {
   for (const id of ['bgRect', 'patRect', 'sheetClipRect']) { const e = $('#' + id); e.setAttribute('width', w); e.setAttribute('height', h); }
   const sh = $('#sheetShadow'); sh.setAttribute('x', 4); sh.setAttribute('y', 6); sh.setAttribute('width', w); sh.setAttribute('height', h);
 }
-function viewArea() { const b = board.getBoundingClientRect(); const top = topbarBottom() - 4, dk = $('#toolbar'), bottom = dk ? Math.max(14, Math.round(b.height - dk.getBoundingClientRect().top) + 6) : 64, left = 8, right = 8; return { b, x: left, y: top, w: Math.max(100, b.width - left - right), h: Math.max(100, b.height - top - bottom) }; }
+function viewArea() { const b = board.getBoundingClientRect(); const top = topbarBottom(), m = 8; return { b, x: m, y: top + m, w: Math.max(100, b.width - m * 2), h: Math.max(100, b.height - top - m * 2) }; }
 function topbarBottom() {
-  const tb = $('#topbar'), btm = tb ? Math.round(tb.getBoundingClientRect().bottom) + 10 : 64;
-  document.documentElement.style.setProperty('--tb', btm + 'px');
+  const tb = $('#bar'), btm = tb ? Math.round(tb.getBoundingClientRect().bottom) : 52;
+  document.documentElement.style.setProperty('--tb', (btm + 10) + 'px');
   return btm;
 }
 function screenSheet() {
@@ -1130,7 +1127,7 @@ let action = null, spaceDown = false, penSeen = false, pinch = null;
 let lastWorldPt = null;
 
 function setTool(t) {
-  if (t !== S.tool) S.styleHidden = false;
+  S.styleOpen = false;
   S.tool = t;
   $$('#toolbar .tbtn[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
   board.setAttribute('class', 'tool-' + t);
@@ -1996,18 +1993,27 @@ function openColorGrid(anchor, hl, pick) {
   closePops(); pop.classList.add('open');
   const r = $('#stylebar').getBoundingClientRect();
   pop.style.left = clamp(r.left + r.width / 2 - pop.offsetWidth / 2, 8, innerWidth - pop.offsetWidth - 8) + 'px';
-  pop.style.top = Math.max(8, r.top - pop.offsetHeight - 10) + 'px';
+  pop.style.top = Math.min(innerHeight - pop.offsetHeight - 8, r.bottom + 8) + 'px';
 }
 function updateStylebar() {
   const sb = $('#stylebar'), t = S.tool;
-  const show = !S.styleHidden && ['pen', 'hl', 'eraser'].includes(t);
-  sb.classList.toggle('hidden', !show);
+  const pb = $('#penBar'), hb = $('#hlBar');
+  if (pb) pb.style.background = color(S.color);
+  if (hb) { hb.style.background = color(S.hl); hb.style.opacity = .75; }
+  const show = !!S.styleOpen && ['pen', 'hl', 'eraser'].includes(t);
+  sb.classList.toggle('open', show);
   if (!show) return;
+  requestAnimationFrame(() => {
+    const btn = document.querySelector(`#toolbar [data-tool="${t}"]`); if (!btn) return;
+    const r = btn.getBoundingClientRect();
+    sb.style.left = clamp(r.left + r.width / 2 - sb.offsetWidth / 2, 8, innerWidth - sb.offsetWidth - 8) + 'px';
+    sb.style.top = (r.bottom + 8) + 'px';
+  });
   const hl = t === 'hl';
   const sw = $('#swatches'); sw.innerHTML = ''; 
   const er = t === 'eraser'; sw.classList.toggle('off', er); $('#stylebar .sep').classList.toggle('off', er);
   const cur = hl ? S.hl : S.color;
-  const pick = c => { if (t === 'select') { restyleSel('c', c); S.color = c; } else if (hl) S.hl = c; else S.color = c; updateStylebar(); };
+  const pick = c => { if (t === 'select') { restyleSel('c', c); S.color = c; } else if (hl) S.hl = c; else S.color = c; S.styleOpen = false; updateStylebar(); };
   for (const c of (hl ? HL_COLORS : PEN_COLORS)) {
     const b = document.createElement('button'); b.className = 'sw' + (cur === c ? ' on' : '');
     b.innerHTML = `<i style="background:${color(c)}"></i>`; b.title = isHex(c) ? c : c[0].toUpperCase() + c.slice(1);
@@ -2024,7 +2030,7 @@ function updateStylebar() {
   (ers ? [5, 9, 13, 18, 24] : [5, 8, 12, 16, 21]).forEach((px, i) => {
     const b = document.createElement('button'); b.className = 'sz' + ((ers ? S.esize : S.size) === i ? ' on' : ''); b.title = (ers ? ['Small eraser', 'Medium eraser', 'Large eraser', 'Huge eraser', 'Giant eraser'] : ['Fine', 'Medium', 'Bold', 'Extra bold', 'Huge'])[i] + ` (${i + 1})`;
     b.innerHTML = ers ? `<i style="width:${px}px;height:${px}px;background:none;border:1.6px solid var(--text)"></i>` : `<i style="width:${px}px;height:${px}px"></i>`;
-    b.onclick = () => { if (ers) { S.esize = i; } else { S.size = i; if (t === 'select') restyleSel('size', i); } updateStylebar(); };
+    b.onclick = () => { if (ers) { S.esize = i; } else { S.size = i; if (t === 'select') restyleSel('size', i); } S.styleOpen = false; updateStylebar(); };
     sz.appendChild(b);
   });
 }
@@ -2060,8 +2066,8 @@ $$('#toolbar .tbtn[data-tool]').forEach(b => b.addEventListener('click', () => {
   if (b.dataset.tool === 'shape') {
     const open = $('#shapeFly').classList.contains('open') || S.tool !== 'shape';
     setTool('shape');
-    if (open) { const r = b.getBoundingClientRect(), f = $('#shapeFly'); f.classList.add('open'); f.style.left = clamp(r.left + r.width / 2 - f.offsetWidth / 2, 8, innerWidth - f.offsetWidth - 8) + 'px'; f.style.top = (r.top - f.offsetHeight - 10) + 'px'; $$('#shapeFly .tbtn').forEach(x => x.classList.toggle('on', x.dataset.shape === S.shape)); }
-  } else if (b.dataset.tool === S.tool && ['pen', 'hl', 'eraser'].includes(S.tool)) { S.styleHidden = !S.styleHidden; closePops(); updateStylebar(); }
+    if (open) { const r = b.getBoundingClientRect(), f = $('#shapeFly'); f.classList.add('open'); f.style.left = clamp(r.left + r.width / 2 - f.offsetWidth / 2, 8, innerWidth - f.offsetWidth - 8) + 'px'; f.style.top = (r.bottom + 8) + 'px'; $$('#shapeFly .tbtn').forEach(x => x.classList.toggle('on', x.dataset.shape === S.shape)); }
+  } else if (b.dataset.tool === S.tool && ['pen', 'hl', 'eraser'].includes(S.tool)) { const was = !!S.styleOpen; closePops(); S.styleOpen = !was; updateStylebar(); }
   else setTool(b.dataset.tool);
 }));
 
@@ -2105,6 +2111,7 @@ function openPop(pop, anchor, alignRight) {
 function closePops() { $$('.pop').forEach(p => p.classList.remove('open')); $('#shapeFly').classList.remove('open'); }
 document.addEventListener('pointerdown', e => {
   if (!e.target.closest('.pop,.sw.wheel,#menuBtn,#pageLabel,#timerChip,#liveChip,#boardChip,#shapeFly,#shapeBtn,#modalWrap')) closePops();
+  if (S.styleOpen && !e.target.closest('#stylebar,#toolbar,#gridPop')) { S.styleOpen = false; updateStylebar(); }
 }, true);
 $('#menuBtn').onclick = () => { buildMenuChips(); openPop($('#menuPop'), $('#menuBtn')); };
 $('#pageLabel').onclick = () => { buildPageList(); openPop($('#pagePop'), $('#pageLabel')); if ($('#pagePop').classList.contains('open')) setTimeout(() => { $('#pageJump').focus(); $('#pageJump').select(); }, 0); };
@@ -2690,7 +2697,7 @@ function hideStudentOnlyMenu() {
 function updateBoardChip() {
   hideStudentOnlyMenu();
   const c = $('#boardChip'); if (!c) return;
-  if (JOIN_CODE) { (c.closest('.group') || c).style.display = 'none'; return; }
+  if (JOIN_CODE) { (c.closest('.bar-group') || c).style.display = 'none'; return; }
   $('#boardChipText').textContent = boardName(activeBoard);
 }
 
