@@ -524,7 +524,7 @@ function buildPatterns() {
   } else {
     p = el('pattern', { id: 'pat', width: 10, height: 10, patternUnits: 'userSpaceOnUse' }, d);
   }
-  $('#bgRect').setAttribute('fill', t.bg); $('#deskRect').setAttribute('fill', t.desk); $('#sheetShadow').setAttribute('fill', 'none'); $('#bgRect').setAttribute('stroke', t.major); $('#bgRect').setAttribute('stroke-width', 1.2); $('#bgRect').setAttribute('vector-effect', 'non-scaling-stroke');
+  $('#bgRect').setAttribute('fill', t.bg); $('#deskRect').setAttribute('fill', t.desk); $('#sheetShadow').setAttribute('fill', 'none'); $('#bgRect').setAttribute('stroke', 'none'); $('#bgRect').setAttribute('stroke-width', 0); $('#bgRect').setAttribute('vector-effect', 'non-scaling-stroke');
   document.body.dataset.chrome = t.dark ? 'dark' : 'light';
   document.body.style.background = t.desk;
 }
@@ -921,7 +921,7 @@ function applySheet() {
   const sh = $('#sheetShadow'); sh.setAttribute('x', 4); sh.setAttribute('y', 6); sh.setAttribute('width', w); sh.setAttribute('height', h);
 }
 function paneWidth() { const p = $('#pagePop'); return p && p.classList.contains('open') && innerWidth > 700 ? p.offsetWidth : 0; }
-function viewArea() { const b = board.getBoundingClientRect(); const top = topbarBottom(), m = 8, pw = paneWidth(); return { b, x: m, y: top + m, w: Math.max(100, b.width - pw - m * 2), h: Math.max(100, b.height - top - m * 2) }; }
+function viewArea() { const b = board.getBoundingClientRect(); const top = topbarBottom(), m = 0, pw = paneWidth(); return { b, x: m, y: top + m, w: Math.max(100, b.width - pw - m * 2), h: Math.max(100, b.height - top - m * 2) }; }
 function topbarBottom() {
   const tb = $('#bar'), btm = tb ? Math.round(tb.getBoundingClientRect().bottom) : 52;
   document.documentElement.style.setProperty('--tb', (btm + 10) + 'px');
@@ -931,6 +931,7 @@ function screenSheet() {
   const a = viewArea(), ar = clamp(a.h / a.w, .4, 2.6);
   return a.w >= a.h ? { w: 1600, h: Math.round(1600 * ar) } : { w: 1000, h: Math.round(1000 * ar) };
 }
+function minZoom() { const fz = fitZoom(); return Math.min(fz * .4, .5); }
 function fitZoom() { const { w, h } = sheet(), a = viewArea(); return Math.min(a.w / w, a.h / h); }
 function fitView() { const { w, h } = sheet(), a = viewArea(), z = fitZoom(); return { z, tx: a.x + (a.w - w * z) / 2, ty: a.y + (a.h - h * z) / 2 }; }
 function fitWidthView() { const { w } = sheet(), a = viewArea(), z = Math.max(fitZoom(), a.w / w); return { z, tx: a.x + (a.w - w * z) / 2, ty: a.y }; }
@@ -958,7 +959,7 @@ let boundsCache = null;
 function constrainView() {
   const a = viewArea(), fz = fitZoom();
   if (!isNum(V.z) || !isNum(V.tx) || !isNum(V.ty)) V = fitView();
-  V.z = clamp(V.z, fz, Math.max(fz, 6));
+  V.z = clamp(V.z, minZoom(), Math.max(fz, 6));
   if (!boundsCache || boundsCache.page !== curPage) boundsCache = Object.assign({ page: curPage }, pageBounds());
   const B = boundsCache, bw = (B.x2 - B.x1) * V.z, bh = (B.y2 - B.y1) * V.z;
   if (bw <= a.w) { const { w } = sheet(), sw = w * V.z, lo = a.x - B.x1 * V.z, hi = a.x + a.w - B.x2 * V.z; V.tx = clamp(a.x + (a.w - sw) / 2, lo, hi); }
@@ -970,6 +971,7 @@ function applyView(fromFollow) {
   constrainView();
   world.setAttribute('transform', `translate(${V.tx.toFixed(2)} ${V.ty.toFixed(2)}) scale(${V.z.toFixed(4)})`);
   $('#zoomLabel').textContent = Math.round(V.z * 100) + '%';
+  { const out = V.z < fitZoom() * .98, br = $('#bgRect'); br.setAttribute('stroke', out ? T().major : 'none'); br.setAttribute('stroke-width', out ? 1.5 : 0); }
   views[curPage] = { ...V };
   if (!fromFollow && Live.following) Live.unfollow();
   renderSelection(); Live.viewChanged(); renderPeers();
@@ -978,7 +980,7 @@ function applyView(fromFollow) {
 function screenToWorld(cx, cy) { const b = board.getBoundingClientRect(); return { x: (cx - b.left - V.tx) / V.z, y: (cy - b.top - V.ty) / V.z }; }
 function zoomAt(f, cx, cy) {
   const b = board.getBoundingClientRect(); cx = cx ?? b.width / 2; cy = cy ?? b.height / 2;
-  const nz = clamp(V.z * f, fitZoom(), Math.max(fitZoom(), 6)), wx = (cx - V.tx) / V.z, wy = (cy - V.ty) / V.z;
+  const nz = clamp(V.z * f, minZoom(), Math.max(fitZoom(), 6)), wx = (cx - V.tx) / V.z, wy = (cy - V.ty) / V.z;
   V.z = nz; V.tx = cx - wx * nz; V.ty = cy - wy * nz; applyView();
 }
 function viewCenter() { const b = board.getBoundingClientRect(); return { x: (b.width / 2 - V.tx) / V.z, y: (b.height / 2 - V.ty) / V.z }; }
@@ -1351,7 +1353,7 @@ function startPinch() {
 function updatePinch() {
   const ts = [...pointers.values()].filter(p => p.type === 'touch'); if (ts.length < 2) return;
   const [a, b] = ts, d = Math.hypot(a.x - b.x, a.y - b.y), mx = (a.x + b.x) / 2, my = (a.y + b.y) / 2;
-  const br = board.getBoundingClientRect(), z = clamp(pinch.V.z * d / pinch.d, fitZoom(), Math.max(fitZoom(), 6));
+  const br = board.getBoundingClientRect(), z = clamp(pinch.V.z * d / pinch.d, minZoom(), Math.max(fitZoom(), 6));
   const wx = (pinch.mx - br.left - pinch.V.tx) / pinch.V.z, wy = (pinch.my - br.top - pinch.V.ty) / pinch.V.z;
   V = { z, tx: mx - br.left - wx * z, ty: my - br.top - wy * z }; applyView();
 }
