@@ -2068,7 +2068,7 @@ $$('#toolbar .tbtn[data-tool]').forEach(b => b.addEventListener('click', () => {
     setTool('shape');
     if (open) { const r = b.getBoundingClientRect(), f = $('#shapeFly'); f.classList.add('open'); f.style.left = clamp(r.left + r.width / 2 - f.offsetWidth / 2, 8, innerWidth - f.offsetWidth - 8) + 'px'; f.style.top = (r.bottom + 8) + 'px'; $$('#shapeFly .tbtn').forEach(x => x.classList.toggle('on', x.dataset.shape === S.shape)); }
   } else if (b.dataset.tool === S.tool && ['pen', 'hl', 'eraser'].includes(S.tool)) { const was = !!S.styleOpen; closePops(); S.styleOpen = !was; updateStylebar(); }
-  else setTool(b.dataset.tool);
+  else { setTool(b.dataset.tool); if (['pen', 'hl'].includes(b.dataset.tool)) { closePops(); S.styleOpen = true; updateStylebar(); } }
 }));
 
 $('#selTrash').addEventListener('pointerdown', e => e.stopPropagation());
