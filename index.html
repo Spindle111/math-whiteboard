@@ -205,6 +205,8 @@ body.student-locked #pageLabel{pointer-events:none}
 @media (hover:none){.pthumb.on .ptrash{display:grid}}
 .pthumb.on{color:var(--accent);font-weight:600}
 .pthumb.on .pimg{border:2px solid var(--accent)}
+.pdftile{position:relative}
+.pdftile .keytag{position:absolute;left:6px;top:6px;background:#d64545;color:#fff;font-size:10px;font-weight:600;padding:2px 6px;border-radius:6px}
 /* modal */
 #modalWrap{position:fixed;inset:0;background:rgba(15,20,30,.35);display:none;place-items:center;z-index:60}
 #modalWrap.open{display:grid}
@@ -1797,6 +1799,16 @@ function choose(title, msg, options) {
   });
 }
 let importingPdf = false;
+async function isAnswerKeyPage(doc, n) {
+  try {
+    const page = await doc.getPage(n), tc = await page.getTextContent();
+    const txt = tc.items.map(it => it.str).join(' ').replace(/\s+/g, ' ');
+    if (/\b(answer\s*key|answer\s*sheet|answers\s*(and|&)\s*explanations|solutions?\s*key|key\s*:)/i.test(txt)) return true;
+    if (/^\s*(answers|solutions|key)\b/i.test(txt)) return true;
+    const pairs = txt.match(/\b\d{1,2}\s*[.)\-:]?\s*\(?[A-E]\)?(?=\s|$|,)/g) || [];
+    return pairs.length >= 6 && txt.length < pairs.length * 40;
+  } catch (e) { return false; }
+}
 function pdfPicker(doc, fname) {
   return new Promise(res => {
     const total = doc.numPages, LIMIT = 60;
@@ -1819,7 +1831,7 @@ function pdfPicker(doc, fname) {
     row.append(cancel, ok);
     m.append(h, sub, tools, grid, er, row);
     let alive = true;
-    const tiles = [];
+    const tiles = [], touched = new Set();
     const update = () => {
       tiles.forEach((t, i) => t.classList.toggle('on', picked.has(i + 1)));
       count.textContent = `${picked.size} of ${total} selected`;
@@ -1834,6 +1846,7 @@ function pdfPicker(doc, fname) {
       const ck = document.createElement('i'); ck.textContent = '✓';
       t.append(ph, lab, ck);
       t.onclick = e => {
+        touched.add(i);
         if (picked.has(i)) picked.delete(i); else { if (picked.size >= LIMIT) { toast(`You can add up to ${LIMIT} pages at a time.`); return; } picked.add(i); }
         update();
       };
@@ -1844,6 +1857,12 @@ function pdfPicker(doc, fname) {
     const done = v => { alive = false; $('#modalWrap').classList.remove('open'); m.classList.remove('wide'); res(v); };
     cancel.onclick = () => done(null);
     ok.onclick = () => { if (picked.size) done({ pages: [...picked].sort((a, b) => a - b), erasable: cb.checked }); };
+    if (total > 1) isAnswerKeyPage(doc, total).then(isKey => {
+      if (!isKey || !alive) return;
+      const t = tiles[total - 1]; if (!t) return;
+      const tag = document.createElement('b'); tag.className = 'keytag'; tag.textContent = 'Answer key'; t.appendChild(tag);
+      if (!touched.has(total)) { picked.delete(total); update(); }
+    });
     update();
     $('#modalWrap').classList.add('open');
     (async () => {
