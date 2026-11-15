@@ -197,7 +197,12 @@ body.student-locked #pageLabel{pointer-events:none}
 .pthumb{min-width:0;display:flex;flex-direction:column;align-items:center;gap:4px;padding:4px;border-radius:10px;font-size:12px;color:var(--muted)}
 .pthumb:hover{background:var(--panel-2)}
 .pthumb .pimg{width:100%;aspect-ratio:4/3;border-radius:6px;border:1px solid var(--line);background:var(--bgc,#223a2f) center/contain no-repeat;overflow:hidden;display:grid;place-items:center}
+.pthumb .pimg{position:relative}
 .pthumb .pimg img{max-width:100%;max-height:100%;display:block}
+.ptrash{position:absolute;left:50%;top:50%;transform:translate(-50%,-50%);width:26px;height:26px;border-radius:50%;background:#d64545;color:#fff;display:none;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.ptrash svg{width:14px;height:14px}
+.pthumb:hover .ptrash{display:grid}
+@media (hover:none){.pthumb.on .ptrash{display:grid}}
 .pthumb.on{color:var(--accent);font-weight:600}
 .pthumb.on .pimg{border:2px solid var(--accent)}
 /* modal */
@@ -330,12 +335,6 @@ body.student-locked #pageLabel{pointer-events:none}
   <div class="pane-head"><b>Pages</b><button class="ibtn" id="paneClose" data-tip="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></button></div>
   <div class="pagejump">Go to page <input class="field" id="pageJump" type="number" min="1"> <span id="pageJumpOf"></span></div>
   <div id="pageList"></div>
-  <div class="menu-sep"></div>
-  <div class="menu-label">Page shape</div>
-  <div class="chips" id="sheetChips"></div>
-  <div class="menu-sep"></div>
-  <button class="menu-item" data-act="dupPage">Duplicate this page</button>
-  <button class="menu-item danger" data-act="delPage">Delete this page</button>
 </aside>
 
 <!-- Timer -->
@@ -2196,6 +2195,10 @@ function buildPageList(scroll) {
     const b = document.createElement('button'); b.className = 'pthumb' + (p.id === curPage ? ' on' : '');
     const box2 = document.createElement('div'); box2.className = 'pimg'; box2.style.background = T().bg;
     const lab = document.createElement('span'); lab.textContent = i + 1;
+    const tr = document.createElement('span'); tr.className = 'ptrash'; tr.title = 'Delete page';
+    tr.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M5 7l1 12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2l1-12M9 7V4h6v3"/></svg>';
+    tr.onclick = ev => { ev.stopPropagation(); deletePage(p.id); };
+    box2.appendChild(tr);
     b.append(box2, lab);
     b.onclick = () => goPage(p.id);
     box.appendChild(b); if (p.id === curPage) cur = b;
@@ -2220,18 +2223,19 @@ $('#menuPop').addEventListener('click', async e => {
     if (await ask('Start a fresh board?', 'All pages will be cleared' + (Live.others().length ? ' for everyone in the session' : '') + '. Download it as a PDF first if you want a copy.', 'Start fresh', true)) newBoard();
   }
 });
-$('#pagePop').addEventListener('click', async e => {
-  const a = e.target.closest('[data-act]'); if (!a) return; closePops();
-  if (a.dataset.act === 'dupPage') addPage(true);
-  if (a.dataset.act === 'delPage') {
-    if (pages().length <= 1) { if (elems.size && await ask('Clear this page?', 'It’s the only page, so it will be cleared instead. You can undo this.', 'Clear page')) commit(pageItems().map(r => Object.assign(clone(r), { del: 1 }))); return; }
-    if (await ask('Delete this page?', 'The page and everything on it will be removed. You can undo this.', 'Delete page', true)) {
-      const ps = pages(), i = ps.findIndex(p => p.id === curPage), target = ps[i - 1] || ps[i + 1];
-      const list = [Object.assign(clone(recs.get(curPage)), { del: 1 }), ...pageItems().map(r => Object.assign(clone(r), { del: 1 }))];
-      commit(list); goPage(target.id);
-    }
+async function deletePage(pid) {
+  const ps = pages(), i = ps.findIndex(p => p.id === pid); if (i < 0) return;
+  const its = pageItems(pid);
+  if (ps.length <= 1) {
+    if (its.length && await ask('Clear this page?', 'It’s the only page, so it will be cleared instead. You can undo this.', 'Clear page')) commit(its.map(r => Object.assign(clone(r), { del: 1 })));
+    return;
   }
-});
+  if (await ask(`Delete page ${i + 1}?`, 'The page and everything on it will be removed. You can undo this.', 'Delete page', true)) {
+    const target = ps[i - 1] || ps[i + 1];
+    commit([Object.assign(clone(recs.get(pid)), { del: 1 }), ...its.map(r => Object.assign(clone(r), { del: 1 }))]);
+    if (pid === curPage) goPage(target.id); else updatePageUI();
+  }
+}
 function newBoard() {
   const list = [];
   for (const r of recs.values()) if (!r.del && !(r.k === 'page' && r.id === 'p0')) list.push(Object.assign(clone(r), { del: 1 }));
