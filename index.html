@@ -310,7 +310,7 @@ body.student-locked #pageLabel{pointer-events:none}
   <button class="menu-item" data-act="importpdf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 18v-6M9 15l3-3 3 3"/></svg>Add PDF worksheet…<span class="k">or drag it in</span></button>
   <button class="menu-item" data-act="exportpdf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Download board as PDF</button>
   <div class="menu-sep"></div>
-  <button class="menu-item" data-act="newboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>New board (start fresh)</button>
+  <button class="menu-item danger" data-act="newboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>New board (start fresh)</button>
   <div class="menu-sep"></div>
   <button class="menu-item" data-act="help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/></svg>Keyboard shortcuts<span class="k">?</span></button>
 </div>
@@ -2683,7 +2683,12 @@ async function switchBoard(key) {
   })();
   await switching; switching = null;
 }
+function hideStudentOnlyMenu() {
+  if (!JOIN_CODE) return;
+  const nb = document.querySelector('[data-act="newboard"]'); if (nb) nb.style.display = 'none';
+}
 function updateBoardChip() {
+  hideStudentOnlyMenu();
   const c = $('#boardChip'); if (!c) return;
   if (JOIN_CODE) { (c.closest('.group') || c).style.display = 'none'; return; }
   $('#boardChipText').textContent = boardName(activeBoard);
