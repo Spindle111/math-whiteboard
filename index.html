@@ -917,7 +917,7 @@ function sheet(pid = curPage) { const p = recs.get(pid); return p && isNum(p.w) 
 function applySheet() {
   boundsCache = null;
   const { w, h } = sheet();
-  for (const id of ['bgRect', 'patRect', 'sheetClipRect']) { const e = $('#' + id); e.setAttribute('width', w); e.setAttribute('height', h); }
+  for (const id of ['bgRect', 'sheetClipRect']) { const e = $('#' + id); e.setAttribute('width', w); e.setAttribute('height', h); }
   const sh = $('#sheetShadow'); sh.setAttribute('x', 4); sh.setAttribute('y', 6); sh.setAttribute('width', w); sh.setAttribute('height', h);
 }
 function paneWidth() { const p = $('#pagePop'); return p && p.classList.contains('open') && innerWidth > 700 ? p.offsetWidth : 0; }
@@ -931,7 +931,15 @@ function screenSheet() {
   const a = viewArea(), ar = clamp(a.h / a.w, .4, 2.6);
   return a.w >= a.h ? { w: 1600, h: Math.round(1600 * ar) } : { w: 1000, h: Math.round(1000 * ar) };
 }
-function minZoom() { const fz = fitZoom(); return Math.min(fz * .4, .5); }
+function curBounds() { if (!boundsCache || boundsCache.page !== curPage) boundsCache = Object.assign({ page: curPage }, pageBounds()); return boundsCache; }
+function fitAllZoom() { const B = curBounds(), a = viewArea(); return Math.min(a.w / (B.x2 - B.x1), a.h / (B.y2 - B.y1)); }
+function minZoom() { return Math.max(.02, Math.min(fitZoom() * .4, .5, fitAllZoom() * .8)); }
+/* everything on the page, including anything written beyond it */
+function fitAllView() { const B = curBounds(), s = sheet(), a = viewArea(), bw = B.x2 - B.x1, bh = B.y2 - B.y1, beyond = B.x1 < 0 || B.y1 < 0 || B.x2 > s.w || B.y2 > s.h, z = Math.min(a.w / bw, a.h / bh) * (beyond ? .94 : 1); return { z, tx: a.x + (a.w - bw * z) / 2 - B.x1 * z, ty: a.y + (a.h - bh * z) / 2 - B.y1 * z }; }
+function fitOf(kind) { return kind === 'w' ? fitWidthView() : kind === 'page' ? fitView() : fitAllView(); }
+function sameView(a, b) { return Math.abs(a.z - b.z) < .004 * b.z && Math.abs(a.tx - b.tx) < 1.5 && Math.abs(a.ty - b.ty) < 1.5; }
+let fitKind = null;
+function detectFit() { return sameView(V, fitView()) ? 'page' : sameView(V, fitAllView()) ? 'all' : sameView(V, fitWidthView()) ? 'w' : null; }
 function fitZoom() { const { w, h } = sheet(), a = viewArea(); return Math.min(a.w / w, a.h / h); }
 function fitView() { const { w, h } = sheet(), a = viewArea(), z = fitZoom(); return { z, tx: a.x + (a.w - w * z) / 2, ty: a.y + (a.h - h * z) / 2 }; }
 function fitWidthView() { const { w } = sheet(), a = viewArea(), z = Math.max(fitZoom(), a.w / w); return { z, tx: a.x + (a.w - w * z) / 2, ty: a.y }; }
@@ -956,23 +964,30 @@ function pageBounds(pid = curPage) {
   return { x1, y1, x2, y2 };
 }
 let boundsCache = null;
+const BOARD_LIMIT = 50000;
+/* the board is open in every direction: you can pan anywhere, and the Fit button brings everything back */
 function constrainView() {
-  const a = viewArea(), fz = fitZoom();
+  const a = viewArea(), fz = fitZoom(), L = BOARD_LIMIT;
   if (!isNum(V.z) || !isNum(V.tx) || !isNum(V.ty)) V = fitView();
   V.z = clamp(V.z, minZoom(), Math.max(fz, 6));
-  if (!boundsCache || boundsCache.page !== curPage) boundsCache = Object.assign({ page: curPage }, pageBounds());
-  const B = boundsCache, bw = (B.x2 - B.x1) * V.z, bh = (B.y2 - B.y1) * V.z;
-  if (bw <= a.w) { const { w } = sheet(), sw = w * V.z, lo = a.x - B.x1 * V.z, hi = a.x + a.w - B.x2 * V.z; V.tx = clamp(a.x + (a.w - sw) / 2, lo, hi); }
-  else V.tx = clamp(V.tx, a.x + a.w - B.x2 * V.z, a.x - B.x1 * V.z);
-  if (bh <= a.h) { const { h } = sheet(), sh = h * V.z, lo = a.y - B.y1 * V.z, hi = a.y + a.h - B.y2 * V.z; V.ty = clamp(a.y + (a.h - sh) / 2, lo, hi); }
-  else V.ty = clamp(V.ty, a.y + a.h - B.y2 * V.z, a.y - B.y1 * V.z);
+  const xlo = a.x + a.w - L * V.z, xhi = a.x + L * V.z, ylo = a.y + a.h - L * V.z, yhi = a.y + L * V.z;
+  V.tx = xlo <= xhi ? clamp(V.tx, xlo, xhi) : (xlo + xhi) / 2;
+  V.ty = ylo <= yhi ? clamp(V.ty, ylo, yhi) : (ylo + yhi) / 2;
+}
+/* the paper pattern covers whatever part of the board is on screen */
+function updateBackdrop() {
+  const b = board.getBoundingClientRect(), pr = $('#patRect'), m = 120 / V.z;
+  pr.style.display = V.z < .12 ? 'none' : '';
+  pr.setAttribute('x', (-V.tx / V.z - m).toFixed(1)); pr.setAttribute('y', (-V.ty / V.z - m).toFixed(1));
+  pr.setAttribute('width', (b.width / V.z + m * 2).toFixed(1)); pr.setAttribute('height', (b.height / V.z + m * 2).toFixed(1));
 }
 function applyView(fromFollow) {
   constrainView();
   world.setAttribute('transform', `translate(${V.tx.toFixed(2)} ${V.ty.toFixed(2)}) scale(${V.z.toFixed(4)})`);
   $('#zoomLabel').textContent = Math.round(V.z * 100) + '%';
-  { const out = V.z < fitZoom() * .98, br = $('#bgRect'); br.setAttribute('stroke', out ? T().major : 'none'); br.setAttribute('stroke-width', out ? 1.5 : 0); }
-  views[curPage] = { ...V };
+  updateBackdrop();
+  fitKind = detectFit();
+  views[curPage] = { z: V.z, tx: V.tx, ty: V.ty, fit: fitKind };
   if (!fromFollow && Live.following) Live.unfollow();
   renderSelection(); Live.viewChanged(); renderPeers();
   if (textEdit) closeTextEditor(true);
@@ -990,10 +1005,15 @@ function contentBox(ids) {
   return isFinite(x1) ? { x: x1, y: y1, w: x2 - x1, h: y2 - y1 } : null;
 }
 function fitContent() {
-  const fv = fitView(), wv = fitWidthView();
-  const atPage = Math.abs(V.z - fv.z) < .005 * fv.z;
-  V = atPage && wv.z > fv.z * 1.02 ? wv : fv; applyView();
+  const all = fitAllView(), wv = fitWidthView();
+  V = fitKind && fitKind !== 'w' && sameView(V, all) && wv.z > all.z * 1.02 ? wv : all; applyView();
 }
+/* after the screen or the Pages pane changes size: a fitted view stays fitted */
+function refitView(kind, shiftX) {
+  if (kind) V = fitOf(kind); else if (shiftX) V.tx += shiftX;
+  applyView(true);
+}
+function savedView(id) { const v = views[id]; return v ? (v.fit ? fitOf(v.fit) : { z: v.z, tx: v.tx, ty: v.ty }) : null; }
 function defaultView() { const { w, h } = sheet(); return h / w > 1.6 ? fitWidthView() : fitView(); }
 
 /* =========================================================
@@ -1004,8 +1024,9 @@ function goPage(id, silent) {
   clearSelection(); closeEditors();
   curPage = id;
   applySheet();
-  V = views[id] ? { ...views[id] } : defaultView();
-  renderPage(); applyView(true); updatePageUI(); Live.viewChanged(); if (typeof LiveInk !== 'undefined') LiveInk.redraw();
+  renderPage();
+  V = savedView(id) || defaultView();
+  applyView(true); updatePageUI(); Live.viewChanged(); if (typeof LiveInk !== 'undefined') LiveInk.redraw();
 }
 function updatePageUI() {
   const ps = pages(), i = ps.findIndex(p => p.id === curPage);
@@ -2160,10 +2181,11 @@ document.addEventListener('pointerdown', e => {
 }, true);
 $('#menuBtn').onclick = () => { buildMenuChips(); openPop($('#menuPop'), $('#menuBtn')); };
 function setPagePane(open) {
-  const p = $('#pagePop'); p.classList.toggle('open', open); store.set('pagePane', open ? 1 : 0);
+  const p = $('#pagePop'), kind = fitKind, before = paneWidth();
+  p.classList.toggle('open', open); store.set('pagePane', open ? 1 : 0);
   $('#pageLabel').classList.toggle('on', open);
   if (open) buildPageList(true);
-  requestAnimationFrame(() => applyView(true));
+  requestAnimationFrame(() => refitView(kind, (before - paneWidth()) / 2));
 }
 $('#pageLabel').onclick = () => setPagePane(!$('#pagePop').classList.contains('open'));
 $('#paneClose').onclick = () => setPagePane(false);
@@ -2459,7 +2481,7 @@ function pageSVGFor(pid, scale) {
   for (const r of pageItems(pid)) g.appendChild(buildEl(r));
   const B = pageBounds(pid), bx = Math.min(0, B.x1), by = Math.min(0, B.y1), bw = Math.max(sz.w, B.x2) - bx, bh = Math.max(sz.h, B.y2) - by;
   const W = Math.max(1, Math.round(bw * scale)), H = Math.max(1, Math.round(bh * scale));
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="${bx} ${by} ${bw} ${bh}"><defs>${$('#patterns').innerHTML}</defs><rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="${T().desk || T().bg}"/><rect width="${sz.w}" height="${sz.h}" fill="${T().bg}"/><rect width="${sz.w}" height="${sz.h}" fill="url(#pat)"/>${g.innerHTML}</svg>`;
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="${W}" height="${H}" viewBox="${bx} ${by} ${bw} ${bh}"><defs>${$('#patterns').innerHTML}</defs><rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="${T().bg}"/><rect x="${bx}" y="${by}" width="${bw}" height="${bh}" fill="url(#pat)"/>${g.innerHTML}</svg>`;
   return { svg, W, H, w: bw, h: bh };
 }
 async function svgToJpeg(svg, W, H) {
@@ -2481,10 +2503,13 @@ async function exportBoardPDF() {
     const ps = pages(); let doc = null;
     for (let i = 0; i < ps.length; i++) {
       toast(`Preparing PDF… page ${i + 1} of ${ps.length}`, 30000);
-      const sz = sheet(ps[i].id), scale = clamp(2000 / Math.max(sz.w, sz.h), .8, 2.2);
+      const sz = sheet(ps[i].id), PB = pageBounds(ps[i].id);
+      const fullW = Math.max(sz.w, PB.x2) - Math.min(0, PB.x1), fullH = Math.max(sz.h, PB.y2) - Math.min(0, PB.y1);
+      const scale = Math.min(clamp(2000 / Math.max(sz.w, sz.h), .8, 2.2), 6000 / Math.max(fullW, fullH), Math.sqrt(12e6 / (fullW * fullH)));
       const { svg, W, H, w, h } = pageSVGFor(ps[i].id, scale);
       const data = await svgToJpeg(svg, W, H);
-      const pw = w * .75, ph = h * .75, orient = pw > ph ? 'landscape' : 'portrait';
+      const pk = Math.min(1, 14000 / (Math.max(w, h) * .75));
+      const pw = w * .75 * pk, ph = h * .75 * pk, orient = pw > ph ? 'landscape' : 'portrait';
       if (!doc) doc = new JsPDF({ orientation: orient, unit: 'pt', format: [pw, ph], compress: true });
       else doc.addPage([pw, ph], orient);
       doc.addImage(data, 'JPEG', 0, 0, pw, ph, undefined, 'FAST');
@@ -3277,7 +3302,7 @@ async function loadBoard() {
   ensurePage();
   const ps = pages();
   curPage = saved && ps.find(p => p.id === saved.cur) ? saved.cur : ps[0].id;
-  V = views[curPage] ? { ...views[curPage] } : null;
+  V = savedView(curPage);
 }
 function rerenderAll() { fnCache.clear(); renderPage(); if (mathEdit) mathPreview(); }
 
@@ -3290,7 +3315,7 @@ setTool('pen'); updateUndoUI(); updateBoardChip();
   renderPage(); applyView(true); updatePageUI(); updateUndoUI(); syncAddressBar();
   Live.init(); handlePairing(); Cloud.init();
 })();
-window.addEventListener('resize', () => { applyView(true); });
+window.addEventListener('resize', () => { refitView(fitKind); });
 
 window.addEventListener('mathjax-ready', () => { mathReady = true; rerenderAll(); });
 
