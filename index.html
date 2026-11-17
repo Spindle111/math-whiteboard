@@ -973,7 +973,24 @@ function constrainView() {
   const xlo = a.x + a.w - L * V.z, xhi = a.x + L * V.z, ylo = a.y + a.h - L * V.z, yhi = a.y + L * V.z;
   V.tx = xlo <= xhi ? clamp(V.tx, xlo, xhi) : (xlo + xhi) / 2;
   V.ty = ylo <= yhi ? clamp(V.ty, ylo, yhi) : (ylo + yhi) / 2;
+  const F = tutorFrame();
+  if (F) {
+    /* a student on a live board can zoom in on the tutor's view and move around inside it, but not leave it */
+    V.z = clamp(V.z, F.z, Math.max(F.z * 8, 6));
+    V.tx = clamp(V.tx, a.x + a.w - F.x2 * V.z, a.x - F.x1 * V.z);
+    V.ty = clamp(V.ty, a.y + a.h - F.y2 * V.z, a.y - F.y1 * V.z);
+  }
 }
+/* the part of the board the tutor is showing, as it fits this student's screen (null when not a following student) */
+function tutorFrame() {
+  let d; try { d = Live.isLockedStudent() && Live.tv; } catch { return null; }
+  if (!d || d.p !== curPage) return null;
+  const a = viewArea(), z = isNum(d.w) && isNum(d.h) && d.w > 0 && d.h > 0 ? Math.min(a.w / d.w, a.h / d.h) : d.z;
+  if (!isNum(z) || z <= 0) return null;
+  const hw = a.w / z / 2, hh = a.h / z / 2;
+  return { z, cx: d.cx, cy: d.cy, x1: d.cx - hw, x2: d.cx + hw, y1: d.cy - hh, y2: d.cy + hh };
+}
+function fitToTutor() { try { if (Live.tv) { Live.jumpTo(Live.tv); return true; } } catch {} return false; }
 /* the paper pattern covers whatever part of the board is on screen */
 function updateBackdrop() {
   const b = board.getBoundingClientRect(), pr = $('#patRect'), m = 120 / V.z;
@@ -1005,6 +1022,7 @@ function contentBox(ids) {
   return isFinite(x1) ? { x: x1, y: y1, w: x2 - x1, h: y2 - y1 } : null;
 }
 function fitContent() {
+  if (tutorFrame() && fitToTutor()) return;
   const all = fitAllView(), wv = fitWidthView();
   V = fitKind && fitKind !== 'w' && sameView(V, all) && wv.z > all.z * 1.02 ? wv : all; applyView();
 }
@@ -2163,7 +2181,7 @@ $('#undoBtn').onclick = undo; $('#redoBtn').onclick = redo;
 $('#prevPage').onclick = () => stepPage(-1); $('#nextPage').onclick = () => { if (Live.isLockedStudent && Live.isLockedStudent()) return; const ps = pages(); if (ps.findIndex(p => p.id === curPage) >= ps.length - 1) addPage(); else stepPage(1); };
 $('#addPage').onclick = () => addPage(false);
 $('#zoomIn').onclick = () => zoomAt(1.25); $('#zoomOut').onclick = () => zoomAt(.8);
-$('#zoomLabel').onclick = () => zoomAt(1 / V.z); $('#zoomFit').onclick = fitContent;
+$('#zoomLabel').onclick = () => { if (tutorFrame() && fitToTutor()) return; zoomAt(1 / V.z); }; $('#zoomFit').onclick = fitContent;
 
 /* ---------- popovers ---------- */
 function openPop(pop, anchor, alignRight) {
@@ -2788,7 +2806,8 @@ async function switchBoard(key) {
 }
 function hideStudentOnlyMenu() {
   if (!JOIN_CODE) return;
-  const nb = document.querySelector('[data-act="newboard"]'); if (nb) nb.style.display = 'none';
+  /* students don't get the board menu at all: no background/color, no PDF download, no new board */
+  const mb = $('#menuBtn'); if (mb) mb.style.display = 'none';
 }
 function updateBoardChip() {
   hideStudentOnlyMenu();
@@ -2804,7 +2823,7 @@ const Live = {
   adhoc: (() => { const a = store.get('mb.adhoc', null); return typeof a === 'string' && /^[a-z0-9]{6,16}$/.test(a) ? a : null; })(),
   name: store.get('mb.name', ''), col: store.get('mb.col', PEER_COLORS[Math.floor(Math.random() * PEER_COLORS.length)]),
   myPres: {}, presDirty: false, followPage: store.get('mb.followPage', true), lastHostPage: null,
-  leadPeer: null, leadKey: null, tutorAct: new Map(), followTimer: 0,
+  leadPeer: null, leadKey: null, tv: null, tutorAct: new Map(), followTimer: 0,
   init() {
     store.set('mb.col', this.col);
     this.myPres = { n: this.name || null, col: this.col, view: this.viewObj() };
@@ -2927,7 +2946,7 @@ const Live = {
       clearTimeout(t); this.connecting = false;
       if (this.hostConn !== c) return;
       const was = this.status;
-      this.hostConn = null; this.connected = false; this.presMap.clear(); this.viewSynced = false; this.leadPeer = null; this.leadKey = null; this.tutorAct.clear(); document.body.classList.remove('student-locked');
+      this.hostConn = null; this.connected = false; this.presMap.clear(); this.viewSynced = false; this.tv = null; this.leadPeer = null; this.leadKey = null; this.tutorAct.clear(); document.body.classList.remove('student-locked');
       if (this.following) this.unfollow(true);
       if (this.tutorClient) { this.retakeHost(); return; }
       if (was !== 'denied') { this.status = 'waiting'; if (was === 'connected') toast('Lost connection to the tutor — reconnecting…', 3500); }
@@ -3034,7 +3053,13 @@ const Live = {
     /* don't yank the board away mid-stroke or mid-sentence: catch up as soon as they finish */
     if (action || pinch || textEdit) { if (!this.followTimer) this.followTimer = setInterval(() => { if (action || pinch || textEdit) return; clearInterval(this.followTimer); this.followTimer = 0; this.syncHostPage(); }, 150); return; }
     this.leadKey = key; this.lastHostPage = v.p; this.viewSynced = true;
+    /* if the student had zoomed in, stay zoomed in by the same amount at the same spot in the tutor's new view */
+    const F = tutorFrame(), a = viewArea();
+    const rel = F && V.z > F.z * 1.01 ? { r: V.z / F.z, ux: ((a.x + a.w / 2 - V.tx) / V.z - F.cx) / (F.x2 - F.x1), uy: ((a.y + a.h / 2 - V.ty) / V.z - F.cy) / (F.y2 - F.y1) } : null;
+    this.tv = v;
     this.jumpTo(v);
+    const N = rel && tutorFrame();
+    if (N) { const z = N.z * rel.r, wx = N.cx + rel.ux * (N.x2 - N.x1), wy = N.cy + rel.uy * (N.y2 - N.y1); V = { z, tx: a.x + a.w / 2 - wx * z, ty: a.y + a.h / 2 - wy * z }; applyView(true); }
   },
   refreshPeers() {
     const hostId = this.code ? 'mtb-' + this.code : null;
