@@ -117,6 +117,7 @@ input,textarea,select{font:inherit;color:var(--text)}
 .menu-item svg{width:18px;height:18px;opacity:.75}
 .menu-item .k{margin-left:auto;color:var(--muted);font-size:12px}
 .menu-item.danger{color:var(--danger)}
+.menu-item.fresh{color:#2f9e44}
 .menu-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);padding:8px 10px 4px}
 .chips{display:flex;flex-wrap:wrap;gap:4px;padding:2px 6px 6px}
 .chip{padding:5px 10px;border-radius:999px;border:1px solid var(--line);font-size:12.5px;font-weight:500}
@@ -324,12 +325,9 @@ body.student-locked #pageLabel{pointer-events:none}
   <div class="menu-label">Board color</div>
   <div class="chips" id="themeChips"></div>
   <div class="menu-sep"></div>
-  <button class="menu-item" data-act="importpdf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M12 18v-6M9 15l3-3 3 3"/></svg>Add PDF worksheet…<span class="k">or drag it in</span></button>
   <button class="menu-item" data-act="exportpdf"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12M7 10l5 5 5-5M5 21h14"/></svg>Download board as PDF</button>
   <div class="menu-sep"></div>
-  <button class="menu-item danger" data-act="newboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>New board (start fresh)</button>
-  <div class="menu-sep"></div>
-  <button class="menu-item" data-act="help"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="9"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.5v.01"/></svg>Keyboard shortcuts<span class="k">?</span></button>
+  <button class="menu-item fresh" data-act="newboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6"/></svg>New board (start fresh)</button>
 </div>
 
 <!-- Pages menu -->
@@ -3380,7 +3378,7 @@ if (window.math) fnCache.clear();
 if (JOIN_CODE && JOIN_KEY) setTimeout(() => toast('Joining your tutor’s live board…', 3000), 400);
 else if (!store.get('mb.seen', false)) {
   store.set('mb.seen', true);
-  setTimeout(() => toast('Tip: drag a PDF worksheet onto the board to add its pages. Press ? for shortcuts.', 5000), 800);
+  setTimeout(() => toast('Tip: drag a PDF worksheet onto the board to add its pages.', 5000), 800);
 }
 </script>
 </body>
