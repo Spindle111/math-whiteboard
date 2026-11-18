@@ -539,21 +539,6 @@ function mergeLook(l) {
   return true;
 }
 const color = c => isHex(c) ? c : (COLORS[c] || COLORS.ink)[T().dark ? 1 : 0];
-const paperCache = new Map();
-let inkDirty = false;
-function paperRects(pid) {
-  let a = paperCache.get(pid);
-  if (!a) { a = []; for (const r of recs.values()) if (r.k === 'item' && !r.del && r.t === 'image' && r.page === pid) a.push(r); paperCache.set(pid, a); }
-  return a;
-}
-function refPt(r) {
-  if (r.t === 'stroke') return Array.isArray(r.pts) && r.pts.length ? { x: r.pts[0][0], y: r.pts[0][1] } : null;
-  if (typeof r.x1 === 'number') return { x: (r.x1 + r.x2) / 2, y: (r.y1 + r.y2) / 2 };
-  if (typeof r.x === 'number') return { x: r.x, y: r.y };
-  return null;
-}
-function onPaper(p, pid) { if (!p) return false; for (const r of paperRects(pid)) if (p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h) return true; return false; }
-const recColor = r => (r.c === 'ink' || r.c === undefined) && !r.hl && r.t !== 'image' && T().dark && onPaper(refPt(r), r.page || curPage) ? COLORS.ink[0] : color(r.c);
 
 const PEN_W = [1.8, 3.2, 6, 11, 18];
 const HL_W = [12, 20, 30, 44, 64];
@@ -604,7 +589,6 @@ function applyRec(r) {
   clockV = Math.max(clockV, r.v);
   if (r.z && r.z > lastZ && r.z < Date.now() + 864e5) lastZ = r.z;
   recs.set(r.id, r);
-  if (r.t === 'image' || (old && old.t === 'image')) { paperCache.clear(); if (r.page === curPage || (old && old.page === curPage)) inkDirty = true; }
   if (r.k === 'page') { pagesDirty = true; if (r.id === curPage) { applySheet(); sheetDirty = true; } }
   else if (r.page === curPage || (old && old.page === curPage)) renderItem(r);
   return true;
@@ -661,7 +645,6 @@ function ensurePage() {
 function afterChange() {
   refreshPagePane(false);
   syncLook();
-  if (inkDirty) { inkDirty = false; if (T().dark) for (const it of pageItems()) if ((it.c === 'ink' || it.c === undefined) && it.t !== 'image') renderItem(it); }
   if (sheetDirty) { sheetDirty = false; requestAnimationFrame(() => applyView(true)); }
   if (pagesDirty) {
     pagesDirty = false;
@@ -681,7 +664,7 @@ const bbCache = new Map();
 let getStroke = null, mathReady = false;
 
 function renderPage() {
-  boundsCache = null; paperCache.clear(); inkDirty = false;
+  boundsCache = null;
   itemsG.innerHTML = ''; elems.clear(); bbCache.clear();
   for (const r of pageItems()) { const g = buildEl(r); g.dataset.id = r.id; g.dataset.z = r.z; itemsG.appendChild(g); elems.set(r.id, g); }
   renderSelection();
@@ -732,7 +715,7 @@ function outlinePath(pts) {
   return d + 'Z';
 }
 function strokeEl(r) {
-  const col = recColor(r);
+  const col = color(r.c);
   if (r.hl) {
     return el('path', { d: smoothPath(r.pts), fill: 'none', stroke: col, 'stroke-width': r.w, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: T().dark ? .35 : .42, style: T().dark ? null : 'mix-blend-mode:multiply' });
   }
@@ -745,7 +728,7 @@ function arrowHead(g, x1, y1, x2, y2, w, col) {
 }
 function norm(r) { return { x: Math.min(r.x1, r.x2), y: Math.min(r.y1, r.y2), w: Math.abs(r.x2 - r.x1), h: Math.abs(r.y2 - r.y1) }; }
 function shapeEl(r) {
-  const col = recColor(r), sw = r.w;
+  const col = color(r.c), sw = r.w;
   const st = { fill: 'none', stroke: col, 'stroke-width': sw, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' };
   const g = el('g');
   if (r.t === 'line') {
@@ -777,7 +760,7 @@ function shapeEl(r) {
   return g;
 }
 function textEl(r) {
-  const t = el('text', { x: r.x, y: r.y, 'font-size': r.size, fill: recColor(r), 'font-family': 'DM Sans, sans-serif', 'xml:space': 'preserve' });
+  const t = el('text', { x: r.x, y: r.y, 'font-size': r.size, fill: color(r.c), 'font-family': 'DM Sans, sans-serif', 'xml:space': 'preserve' });
   String(r.text).split('\n').forEach((line, i) => {
     const ts = el('tspan', { x: r.x, dy: i === 0 ? r.size * .92 : r.size * 1.25 }, t);
     ts.textContent = line || ' ';
@@ -1500,7 +1483,7 @@ function drawTemp() {
   tempG.innerHTML = '';
   const a = action; if (!a) return;
   if (a.kind === 'draw') {
-    const r = { t: 'stroke', page: curPage, pts: a.pts, c: a.hl ? S.hl : S.color, w: (a.hl ? HL_W : PEN_W)[S.size], hl: a.hl ? 1 : 0 };
+    const r = { t: 'stroke', pts: a.pts, c: a.hl ? S.hl : S.color, w: (a.hl ? HL_W : PEN_W)[S.size], hl: a.hl ? 1 : 0 };
     tempG.appendChild(strokeEl(r));
   } else if (a.kind === 'shape') {
     const r = { t: a.t === 'arrow' ? 'line' : a.t, arrow: a.t === 'arrow' ? 1 : 0, x1: a.x1, y1: a.y1, x2: a.x2, y2: a.y2, c: S.color, w: SHAPE_W[S.size] };
@@ -1648,7 +1631,7 @@ function openTextEditor(r, p) {
   textEdit = { r: clone(r), isNew };
   const g = elems.get(r.id); if (g) g.setAttribute('opacity', '0');
   const b = board.getBoundingClientRect();
-  Object.assign(ta.style, { display: 'block', left: (b.left + V.tx + r.x * V.z - 3) + 'px', top: (b.top + V.ty + r.y * V.z - 1) + 'px', fontSize: (r.size * V.z) + 'px', color: recColor(r), minWidth: (40 * V.z) + 'px' });
+  Object.assign(ta.style, { display: 'block', left: (b.left + V.tx + r.x * V.z - 3) + 'px', top: (b.top + V.ty + r.y * V.z - 1) + 'px', fontSize: (r.size * V.z) + 'px', color: color(r.c), minWidth: (40 * V.z) + 'px' });
   ta.value = r.text; sizeTA();
   ta.focus(); setTimeout(() => ta.focus(), 0);
 }
@@ -3387,7 +3370,7 @@ const LiveInk = {
   draw(st) {
     if (st.el) st.el.remove(); st.el = null;
     if (st.p !== curPage || !st.pts.length) return;
-    st.el = strokeEl({ t: 'stroke', page: st.p, pts: st.pts, c: st.c, w: st.w, hl: st.hl });
+    st.el = strokeEl({ t: 'stroke', pts: st.pts, c: st.c, w: st.w, hl: st.hl });
     this.g().appendChild(st.el);
   },
   redraw() { for (const st of this.strokes.values()) this.draw(st); },
