@@ -477,7 +477,8 @@ const COLORS = {
   white:   ['#ffffff', '#ffffff'],
 };
 const HL_COLORS = ['yellow', 'lime', 'green', 'teal', 'sky', 'blue', 'purple', 'magenta', 'pink', 'red', 'orange', 'gray'];
-const PEN_COLORS = ['ink', 'gray', 'brown', 'red', 'pink', 'orange', 'yellow', 'lime', 'green', 'teal', 'sky', 'blue', 'purple', 'magenta', 'white'];
+const BLACK = '#000000';
+const PEN_COLORS = ['ink', BLACK, 'gray', 'brown', 'red', 'pink', 'orange', 'yellow', 'lime', 'green', 'teal', 'sky', 'blue', 'purple', 'magenta', 'white'];
 const isHex = c => typeof c === 'string' && /^#[0-9a-f]{6}$/i.test(c);
 const THEMES = {
   white: { name: 'Whiteboard', bg: '#ffffff', grid: '#e6eaf0', major: '#cdd5e0', dark: false, desk: '#ffffff' },
@@ -489,13 +490,70 @@ const BGS = { blank: 'Blank', grid: 'Grid', graph: 'Graph paper', dots: 'Dots', 
 const PEER_COLORS = ['#e8590c', '#7048e8', '#0ca678', '#d6336c', '#1c7ed6', '#f59f00'];
 
 const S = {
-  tool: 'pen', shape: 'line', esize: 4, color: 'ink', hl: 'yellow', size: 1,
+  tool: 'pen', shape: 'line', esize: 2, color: 'ink', hl: 'yellow', size: 1,
   theme: store.get('mb.theme', 'chalk'), bg: store.get('mb.bg', 'grid'),
 };
 if (!THEMES[S.theme]) S.theme = 'chalk';
 if (!BGS[S.bg]) S.bg = 'grid';
 const T = () => THEMES[S.theme];
+/* The paper pattern and board color are one choice made by the tutor. It travels two ways:
+   between the tutor's own devices (with the student list), and inside each board (a small
+   settings record) so students and anyone else on that board see the same thing. The newest
+   choice always wins; before anyone has chosen, Chalkboard wins. */
+const THEME_RANK = { chalk: 4, white: 3, paper: 2, dark: 1 };
+const Look = { t: (() => { const t = store.get('mb.lookT', 0); return typeof t === 'number' && isFinite(t) && t > 0 ? t : 0; })() };
+const okLook = l => !!l && typeof l === 'object' && typeof l.th === 'string' && Object.prototype.hasOwnProperty.call(THEMES, l.th) && typeof l.bg === 'string' && Object.prototype.hasOwnProperty.call(BGS, l.bg);
+const lookBeats = (a, b) => a.t !== b.t ? a.t > b.t : THEME_RANK[a.th] !== THEME_RANK[b.th] ? THEME_RANK[a.th] > THEME_RANK[b.th] : a.bg > b.bg;
+const myLook = () => ({ th: S.theme, bg: S.bg, t: Look.t });
+function showLook(th, bg) {
+  if (th === S.theme && bg === S.bg) return false;
+  S.theme = th; S.bg = bg; store.set('mb.theme', th); store.set('mb.bg', bg);
+  buildPatterns(); renderPage(); updateStylebar(); buildMenuChips(); refreshPagePane(false);
+  return true;
+}
+function boardLook() { const r = recs.get('cfg'); return r && !r.del && okLook(r) ? { th: r.th, bg: r.bg, t: typeof r.lt === 'number' && isFinite(r.lt) && r.lt > 0 ? r.lt : 0 } : null; }
+function writeBoardLook() { putRecords([{ id: 'cfg', k: 'cfg', th: S.theme, bg: S.bg, lt: Look.t }]); }
+let lookBusy = false;
+function syncLook() {
+  if (lookBusy) return; lookBusy = true;
+  try {
+    const c = boardLook();
+    if (JOIN_CODE) { if (c) showLook(c.th, c.bg); return; }
+    const mine = myLook();
+    if (c && lookBeats(c, mine)) { Look.t = c.t; store.set('mb.lookT', Look.t); showLook(c.th, c.bg); TutorSync.push(); }
+    else if (c ? lookBeats(mine, c) : (Cloud.firstSnap || (Cloud.tried && !Cloud.ok))) writeBoardLook();
+  } finally { lookBusy = false; }
+}
+function chooseLook(th, bg) {
+  Look.t = Date.now(); store.set('mb.lookT', Look.t);
+  if (!showLook(th, bg)) buildMenuChips();
+  if (JOIN_CODE) return;
+  lookBusy = true; try { writeBoardLook(); } finally { lookBusy = false; }
+  TutorSync.push();
+}
+function mergeLook(l) {
+  if (JOIN_CODE || !okLook(l) || typeof l.t !== 'number' || !isFinite(l.t) || l.t < 0) return false;
+  const inc = { th: l.th, bg: l.bg, t: l.t };
+  if (!lookBeats(inc, myLook())) return false;
+  Look.t = inc.t; store.set('mb.lookT', Look.t); showLook(inc.th, inc.bg); syncLook();
+  return true;
+}
 const color = c => isHex(c) ? c : (COLORS[c] || COLORS.ink)[T().dark ? 1 : 0];
+const paperCache = new Map();
+let inkDirty = false;
+function paperRects(pid) {
+  let a = paperCache.get(pid);
+  if (!a) { a = []; for (const r of recs.values()) if (r.k === 'item' && !r.del && r.t === 'image' && r.page === pid) a.push(r); paperCache.set(pid, a); }
+  return a;
+}
+function refPt(r) {
+  if (r.t === 'stroke') return Array.isArray(r.pts) && r.pts.length ? { x: r.pts[0][0], y: r.pts[0][1] } : null;
+  if (typeof r.x1 === 'number') return { x: (r.x1 + r.x2) / 2, y: (r.y1 + r.y2) / 2 };
+  if (typeof r.x === 'number') return { x: r.x, y: r.y };
+  return null;
+}
+function onPaper(p, pid) { if (!p) return false; for (const r of paperRects(pid)) if (p.x >= r.x && p.x <= r.x + r.w && p.y >= r.y && p.y <= r.y + r.h) return true; return false; }
+const recColor = r => (r.c === 'ink' || r.c === undefined) && !r.hl && r.t !== 'image' && T().dark && onPaper(refPt(r), r.page || curPage) ? COLORS.ink[0] : color(r.c);
 
 const PEN_W = [1.8, 3.2, 6, 11, 18];
 const HL_W = [12, 20, 30, 44, 64];
@@ -546,6 +604,7 @@ function applyRec(r) {
   clockV = Math.max(clockV, r.v);
   if (r.z && r.z > lastZ && r.z < Date.now() + 864e5) lastZ = r.z;
   recs.set(r.id, r);
+  if (r.t === 'image' || (old && old.t === 'image')) { paperCache.clear(); if (r.page === curPage || (old && old.page === curPage)) inkDirty = true; }
   if (r.k === 'page') { pagesDirty = true; if (r.id === curPage) { applySheet(); sheetDirty = true; } }
   else if (r.page === curPage || (old && old.page === curPage)) renderItem(r);
   return true;
@@ -601,6 +660,8 @@ function ensurePage() {
 
 function afterChange() {
   refreshPagePane(false);
+  syncLook();
+  if (inkDirty) { inkDirty = false; if (T().dark) for (const it of pageItems()) if ((it.c === 'ink' || it.c === undefined) && it.t !== 'image') renderItem(it); }
   if (sheetDirty) { sheetDirty = false; requestAnimationFrame(() => applyView(true)); }
   if (pagesDirty) {
     pagesDirty = false;
@@ -620,7 +681,7 @@ const bbCache = new Map();
 let getStroke = null, mathReady = false;
 
 function renderPage() {
-  boundsCache = null;
+  boundsCache = null; paperCache.clear(); inkDirty = false;
   itemsG.innerHTML = ''; elems.clear(); bbCache.clear();
   for (const r of pageItems()) { const g = buildEl(r); g.dataset.id = r.id; g.dataset.z = r.z; itemsG.appendChild(g); elems.set(r.id, g); }
   renderSelection();
@@ -671,7 +732,7 @@ function outlinePath(pts) {
   return d + 'Z';
 }
 function strokeEl(r) {
-  const col = color(r.c);
+  const col = recColor(r);
   if (r.hl) {
     return el('path', { d: smoothPath(r.pts), fill: 'none', stroke: col, 'stroke-width': r.w, 'stroke-linecap': 'round', 'stroke-linejoin': 'round', opacity: T().dark ? .35 : .42, style: T().dark ? null : 'mix-blend-mode:multiply' });
   }
@@ -684,7 +745,7 @@ function arrowHead(g, x1, y1, x2, y2, w, col) {
 }
 function norm(r) { return { x: Math.min(r.x1, r.x2), y: Math.min(r.y1, r.y2), w: Math.abs(r.x2 - r.x1), h: Math.abs(r.y2 - r.y1) }; }
 function shapeEl(r) {
-  const col = color(r.c), sw = r.w;
+  const col = recColor(r), sw = r.w;
   const st = { fill: 'none', stroke: col, 'stroke-width': sw, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' };
   const g = el('g');
   if (r.t === 'line') {
@@ -716,7 +777,7 @@ function shapeEl(r) {
   return g;
 }
 function textEl(r) {
-  const t = el('text', { x: r.x, y: r.y, 'font-size': r.size, fill: color(r.c), 'font-family': 'DM Sans, sans-serif', 'xml:space': 'preserve' });
+  const t = el('text', { x: r.x, y: r.y, 'font-size': r.size, fill: recColor(r), 'font-family': 'DM Sans, sans-serif', 'xml:space': 'preserve' });
   String(r.text).split('\n').forEach((line, i) => {
     const ts = el('tspan', { x: r.x, dy: i === 0 ? r.size * .92 : r.size * 1.25 }, t);
     ts.textContent = line || ' ';
@@ -896,6 +957,7 @@ function buildEl(r) {
         const mk = el('mask', { id: mid, maskUnits: 'userSpaceOnUse', x: r.x - 2, y: r.y - 2, width: r.w + 4, height: r.h + 4 }, el('defs', null, g));
         el('rect', { x: r.x - 2, y: r.y - 2, width: r.w + 4, height: r.h + 4, fill: 'white' }, mk);
         for (const h of r.holes) el('path', { d: smoothPath(h.pts), fill: 'none', stroke: 'black', 'stroke-width': h.w, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, mk);
+        if (r.pn) el('rect', { x: r.x, y: r.y, width: r.w, height: r.h, fill: '#fff' }, g);
         im.setAttribute('mask', `url(#${mid})`); g.appendChild(im);
       } else g = im;
       break;
@@ -1438,7 +1500,7 @@ function drawTemp() {
   tempG.innerHTML = '';
   const a = action; if (!a) return;
   if (a.kind === 'draw') {
-    const r = { t: 'stroke', pts: a.pts, c: a.hl ? S.hl : S.color, w: (a.hl ? HL_W : PEN_W)[S.size], hl: a.hl ? 1 : 0 };
+    const r = { t: 'stroke', page: curPage, pts: a.pts, c: a.hl ? S.hl : S.color, w: (a.hl ? HL_W : PEN_W)[S.size], hl: a.hl ? 1 : 0 };
     tempG.appendChild(strokeEl(r));
   } else if (a.kind === 'shape') {
     const r = { t: a.t === 'arrow' ? 'line' : a.t, arrow: a.t === 'arrow' ? 1 : 0, x1: a.x1, y1: a.y1, x2: a.x2, y2: a.y2, c: S.color, w: SHAPE_W[S.size] };
@@ -1586,7 +1648,7 @@ function openTextEditor(r, p) {
   textEdit = { r: clone(r), isNew };
   const g = elems.get(r.id); if (g) g.setAttribute('opacity', '0');
   const b = board.getBoundingClientRect();
-  Object.assign(ta.style, { display: 'block', left: (b.left + V.tx + r.x * V.z - 3) + 'px', top: (b.top + V.ty + r.y * V.z - 1) + 'px', fontSize: (r.size * V.z) + 'px', color: color(r.c), minWidth: (40 * V.z) + 'px' });
+  Object.assign(ta.style, { display: 'block', left: (b.left + V.tx + r.x * V.z - 3) + 'px', top: (b.top + V.ty + r.y * V.z - 1) + 'px', fontSize: (r.size * V.z) + 'px', color: recColor(r), minWidth: (40 * V.z) + 'px' });
   ta.value = r.text; sizeTA();
   ta.focus(); setTimeout(() => ta.focus(), 0);
 }
@@ -2099,12 +2161,13 @@ function updateStylebar() {
   const pick = c => { if (t === 'select') { restyleSel('c', c); S.color = c; } else if (hl) S.hl = c; else S.color = c; S.styleOpen = false; updateStylebar(); };
   for (const c of (hl ? HL_COLORS : PEN_COLORS)) {
     const b = document.createElement('button'); b.className = 'sw' + (cur === c ? ' on' : '');
-    b.innerHTML = `<i style="background:${color(c)}"></i>`; b.title = isHex(c) ? c : c[0].toUpperCase() + c.slice(1);
+    b.innerHTML = `<i style="background:${color(c)}"></i>`; b.title = c === BLACK ? 'Black' : isHex(c) ? c : c[0].toUpperCase() + c.slice(1);
     b.onclick = () => pick(c);
     sw.appendChild(b);
   }
-  const cb = document.createElement('button'); cb.className = 'sw wheel' + (isHex(cur) ? ' on' : ''); cb.title = 'More colors';
-  cb.innerHTML = isHex(cur) ? `<i style="background:${cur}"></i>` : '<i></i>';
+  const cb = document.createElement('button'); const custom = isHex(cur) && !(hl ? HL_COLORS : PEN_COLORS).includes(cur);
+  cb.className = 'sw wheel' + (custom ? ' on' : ''); cb.title = 'More colors';
+  cb.innerHTML = custom ? `<i style="background:${cur}"></i>` : '<i></i>';
   cb.onclick = () => openColorGrid(cb, hl, pick);
   sw.appendChild(cb);
 
@@ -2151,7 +2214,7 @@ $$('#toolbar .tbtn[data-tool]').forEach(b => b.addEventListener('click', () => {
     setTool('shape');
     if (open) { const r = b.getBoundingClientRect(), f = $('#shapeFly'); f.classList.add('open'); f.style.left = clamp(r.left + r.width / 2 - f.offsetWidth / 2, 8, innerWidth - f.offsetWidth - 8) + 'px'; f.style.top = (r.bottom + 8) + 'px'; $$('#shapeFly .tbtn').forEach(x => x.classList.toggle('on', x.dataset.shape === S.shape)); }
   } else if (b.dataset.tool === S.tool && ['pen', 'hl', 'eraser'].includes(S.tool)) { const was = !!S.styleOpen; closePops(); S.styleOpen = !was; updateStylebar(); }
-  else { setTool(b.dataset.tool); if (['pen', 'hl'].includes(b.dataset.tool)) { closePops(); S.styleOpen = true; updateStylebar(); } }
+  else setTool(b.dataset.tool);
 }));
 
 $('#selTrash').addEventListener('pointerdown', e => e.stopPropagation());
@@ -2217,9 +2280,9 @@ $('#boardChip').onclick = () => { renderStudentsPop(); openPop($('#studentsPop')
 
 function buildMenuChips() {
   const bc = $('#bgChips'); bc.innerHTML = '';
-  for (const k in BGS) { const b = document.createElement('button'); b.className = 'chip' + (S.bg === k ? ' on' : ''); b.textContent = BGS[k]; b.onclick = () => { S.bg = k; store.set('mb.bg', k); buildPatterns(); buildMenuChips(); }; bc.appendChild(b); }
+  for (const k in BGS) { const b = document.createElement('button'); b.className = 'chip' + (S.bg === k ? ' on' : ''); b.textContent = BGS[k]; b.onclick = () => chooseLook(S.theme, k); bc.appendChild(b); }
   const tc = $('#themeChips'); tc.innerHTML = '';
-  for (const k in THEMES) { const b = document.createElement('button'); b.className = 'chip' + (S.theme === k ? ' on' : ''); b.textContent = THEMES[k].name; b.onclick = () => { S.theme = k; store.set('mb.theme', k); buildPatterns(); renderPage(); updateStylebar(); buildMenuChips(); }; tc.appendChild(b); }
+  for (const k in THEMES) { const b = document.createElement('button'); b.className = 'chip' + (S.theme === k ? ' on' : ''); b.textContent = THEMES[k].name; b.onclick = () => chooseLook(k, S.bg); tc.appendChild(b); }
 }
 function buildSheetChips() {
   const box = $('#sheetChips'); if (!box) return; box.innerHTML = '';
@@ -2297,7 +2360,7 @@ async function deletePage(pid) {
 }
 function newBoard() {
   const list = [];
-  for (const r of recs.values()) if (!r.del && !(r.k === 'page' && r.id === 'p0')) list.push(Object.assign(clone(r), { del: 1 }));
+  for (const r of recs.values()) if (!r.del && r.k !== 'cfg' && !(r.k === 'page' && r.id === 'p0')) list.push(Object.assign(clone(r), { del: 1 }));
   const p0 = recs.get('p0'), sc = screenSheet(); if (p0) list.push(Object.assign(clone(p0), { del: 0, w: sc.w, h: sc.h }));
   putRecords(list); hist.undo = []; hist.redo = []; updateUndoUI(); ensurePage(); delete views.p0; goPage('p0', true); V = defaultView(); applyView(true);
 }
@@ -2568,6 +2631,7 @@ function validRec(r, fromFile) {
   if (!r || typeof r !== 'object' || !isStr(r.id, 48) || !r.id) return false;
   if (!fromFile && (!isNum(r.v) || !isStr(r.a, 24))) return false;
   if (r.k === 'page') return isNum(r.z) && (r.w === undefined || (isNum(r.w) && r.w >= 200 && r.w <= 20000)) && (r.h === undefined || (isNum(r.h) && r.h >= 200 && r.h <= 20000));
+  if (r.k === 'cfg') return r.id === 'cfg' && !r.del && okLook(r) && (r.lt === undefined || isNum(r.lt));
   if (r.k !== 'item' || !isStr(r.page, 48)) return false;
   if (r.del) return true;
   if (!TYPES.has(r.t) || !isNum(r.z)) return false;
@@ -2610,17 +2674,17 @@ const FIREBASE_CONFIG = {
 };
 const FB_BASE = window.MB_FB_BASE || 'https://www.gstatic.com/firebasejs/10.12.2/';
 const Cloud = {
-  ok: false, db: null, F: null, boardId: null, unsubBoard: null, unsubTutor: null, firstSnap: false,
+  ok: false, tried: false, db: null, F: null, boardId: null, unsubBoard: null, unsubTutor: null, firstSnap: false,
   pending: new Map(), pendingBoard: null, flushT: 0, warned: false,
   async init() {
     try {
       const [A, Au, Fs] = await Promise.all([import(FB_BASE + 'firebase-app.js'), import(FB_BASE + 'firebase-auth.js'), import(FB_BASE + 'firebase-firestore.js')]);
       const app = A.initializeApp(FIREBASE_CONFIG);
       await Au.signInAnonymously(Au.getAuth(app));
-      this.db = Fs.getFirestore(app); this.F = Fs; this.ok = true;
+      this.db = Fs.getFirestore(app); this.F = Fs; this.ok = true; this.tried = true;
       this.openBoard();
       if (!JOIN_CODE) this.openTutor();
-    } catch (e) { console.warn('Online saving unavailable', e); }
+    } catch (e) { console.warn('Online saving unavailable', e); this.tried = true; syncLook(); }
   },
   currentBoardId() { return JOIN_CODE || activeBoard || ('my' + TUTOR_CODE); },
   openBoard() {
@@ -2645,6 +2709,7 @@ const Cloud = {
         snap.docs.forEach(d => { try { const r = JSON.parse(d.data().j); cloud.set(r.id, r); } catch {} });
         const up = [...recs.values()].filter(r => { const c = cloud.get(r.id); return !c || newer(r, c); });
         if (up.length) this.write(up);
+        syncLook();
       }
     }, err => this.fail(err));
   },
@@ -2682,11 +2747,12 @@ const Cloud = {
           updateBoardChip(); Live.ensureHost();
           if ($('#studentsPop').classList.contains('open')) renderStudentsPop();
         }
+        if (d) mergeLook(d.look);
       }
       if (cloudJ !== this.studentsJ()) this.pushStudents();
     }, err => this.fail(err));
   },
-  studentsJ() { return JSON.stringify({ list: Students.list, removed: Students.removed.slice(-200) }); },
+  studentsJ() { const byKey = (a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0; return JSON.stringify({ list: [...Students.list].sort(byKey), removed: Students.removed.slice(-200).sort(byKey), look: myLook() }); },
   pushStudents() {
     if (!this.ok) return;
     const F = this.F;
@@ -2733,7 +2799,7 @@ const Students = {
 const TutorSync = {
   peer: null, conns: new Map(), hostConn: null, role: null, timer: 0,
   start() { if (JOIN_CODE || !window.Peer) return; this.tryHost(); },
-  payload() { return { type: 'students', list: Students.list, removed: Students.removed.slice(-200) }; },
+  payload() { return { type: 'students', list: Students.list, removed: Students.removed.slice(-200), look: myLook() }; },
   tryHost() {
     const p = this.peer = new Peer('mtbt-' + TUTOR_CODE, PEER_OPTS);
     p.on('open', () => { this.role = 'host'; });
@@ -2758,7 +2824,8 @@ const TutorSync = {
   restart(ms) { const p = this.peer; this.peer = null; this.role = null; this.hostConn = null; this.conns.clear(); try { p && p.destroy(); } catch {} clearTimeout(this.timer); this.timer = setTimeout(() => this.tryHost(), ms || 1500 + Math.random() * 2000); },
   onData(d, from) {
     if (!d || d.type !== 'students') return;
-    const changed = Students.merge(d.list, d.removed);
+    const lk = mergeLook(d.look);
+    const changed = Students.merge(d.list, d.removed) || lk;
     if (changed) {
       if (activeBoard && !Students.get(activeBoard)) switchBoard(null);
       updateBoardChip(); Live.ensureHost();
@@ -2798,7 +2865,7 @@ async function switchBoard(key) {
     await loadBoard();
     applySheet(); if (!V) V = defaultView();
     renderPage(); applyView(true); updatePageUI(); updateUndoUI(); updateBoardChip(); syncAddressBar();
-    Live.afterSwitch(key); Cloud.openBoard();
+    Live.afterSwitch(key); Cloud.openBoard(); syncLook();
   })();
   await switching; switching = null;
 }
@@ -3320,7 +3387,7 @@ const LiveInk = {
   draw(st) {
     if (st.el) st.el.remove(); st.el = null;
     if (st.p !== curPage || !st.pts.length) return;
-    st.el = strokeEl({ t: 'stroke', pts: st.pts, c: st.c, w: st.w, hl: st.hl });
+    st.el = strokeEl({ t: 'stroke', page: st.p, pts: st.pts, c: st.c, w: st.w, hl: st.hl });
     this.g().appendChild(st.el);
   },
   redraw() { for (const st of this.strokes.values()) this.draw(st); },
@@ -3366,6 +3433,7 @@ setTool('pen'); updateUndoUI(); updateBoardChip();
   await loadBoard();
   applySheet(); if (!V) V = defaultView();
   renderPage(); applyView(true); updatePageUI(); updateUndoUI(); syncAddressBar();
+  syncLook();
   Live.init(); handlePairing(); Cloud.init();
 })();
 window.addEventListener('resize', () => { refitView(fitKind); });
