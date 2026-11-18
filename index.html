@@ -940,7 +940,6 @@ function buildEl(r) {
         const mk = el('mask', { id: mid, maskUnits: 'userSpaceOnUse', x: r.x - 2, y: r.y - 2, width: r.w + 4, height: r.h + 4 }, el('defs', null, g));
         el('rect', { x: r.x - 2, y: r.y - 2, width: r.w + 4, height: r.h + 4, fill: 'white' }, mk);
         for (const h of r.holes) el('path', { d: smoothPath(h.pts), fill: 'none', stroke: 'black', 'stroke-width': h.w, 'stroke-linecap': 'round', 'stroke-linejoin': 'round' }, mk);
-        if (r.pn) el('rect', { x: r.x, y: r.y, width: r.w, height: r.h, fill: '#fff' }, g);
         im.setAttribute('mask', `url(#${mid})`); g.appendChild(im);
       } else g = im;
       break;
