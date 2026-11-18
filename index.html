@@ -512,7 +512,13 @@ function showLook(th, bg) {
   return true;
 }
 function boardLook() { const r = recs.get('cfg'); return r && !r.del && okLook(r) ? { th: r.th, bg: r.bg, t: typeof r.lt === 'number' && isFinite(r.lt) && r.lt > 0 ? r.lt : 0 } : null; }
-function writeBoardLook() { putRecords([{ id: 'cfg', k: 'cfg', th: S.theme, bg: S.bg, lt: Look.t }]); }
+let lookWrites = [];
+function writeBoardLook() {
+  const now = Date.now(); lookWrites = lookWrites.filter(t => now - t < 60000);
+  if (lookWrites.length >= 12) return;   /* a brake: this is only ever needed a few times a minute */
+  lookWrites.push(now);
+  putRecords([{ id: 'cfg', k: 'cfg', th: S.theme, bg: S.bg, lt: Look.t }]);
+}
 let lookBusy = false;
 function syncLook() {
   if (lookBusy) return; lookBusy = true;
@@ -2656,7 +2662,7 @@ const FIREBASE_CONFIG = {
 };
 const FB_BASE = window.MB_FB_BASE || 'https://www.gstatic.com/firebasejs/10.12.2/';
 const Cloud = {
-  ok: false, tried: false, db: null, F: null, boardId: null, unsubBoard: null, unsubTutor: null, firstSnap: false,
+  ok: false, tried: false, db: null, F: null, boardId: null, unsubBoard: null, unsubTutor: null, unsubLook: null, cloudLook: null, lookSeen: false, braked: false, tutorDoc: null, firstSnap: false,
   pending: new Map(), pendingBoard: null, flushT: 0, warned: false,
   async init() {
     try {
@@ -2721,9 +2727,10 @@ const Cloud = {
   openTutor() {
     const F = this.F, ref = F.doc(this.db, 'tutors', TUTOR_CODE);
     this.unsubTutor = F.onSnapshot(ref, snap => {
-      let cloudJ = null;
+      let cloudJ = null, d = null;
       if (snap.exists()) {
-        cloudJ = snap.data().j; let d; try { d = JSON.parse(cloudJ); } catch { d = null; }
+        cloudJ = snap.data().j; try { d = JSON.parse(cloudJ); } catch { d = null; }
+        this.tutorDoc = d;
         if (d && Students.merge(d.list, d.removed)) {
           if (activeBoard && !Students.get(activeBoard)) switchBoard(null);
           updateBoardChip(); Live.ensureHost();
@@ -2731,14 +2738,52 @@ const Cloud = {
         }
         if (d) mergeLook(d.look);
       }
-      if (cloudJ !== this.studentsJ()) this.pushStudents();
+      /* Save only when this device knows something the saved copy doesn't. Never save just because the
+         saved text looks different: two devices on different versions of the app write it differently,
+         and each would keep "correcting" the other forever. */
+      if (this.studentsAhead(d)) this.pushStudents();
+    }, err => this.fail(err));
+    /* the board look is kept in its own small document, so the student-list document stays exactly as every version writes it */
+    this.unsubLook = F.onSnapshot(F.doc(this.db, 'tutors', TUTOR_CODE + '_look'), snap => {
+      let l = null;
+      if (snap.exists()) { try { l = JSON.parse(snap.data().j); } catch { l = null; } }
+      this.cloudLook = okLook(l) && isNum(l.t) && l.t >= 0 ? { th: l.th, bg: l.bg, t: l.t } : null;
+      this.lookSeen = true;
+      if (this.cloudLook) mergeLook(this.cloudLook);
+      this.pushLook();
     }, err => this.fail(err));
   },
-  studentsJ() { const byKey = (a, b) => a.key < b.key ? -1 : a.key > b.key ? 1 : 0; return JSON.stringify({ list: [...Students.list].sort(byKey), removed: Students.removed.slice(-200).sort(byKey), look: myLook() }); },
+  studentsAhead(d) {
+    const list = d && Array.isArray(d.list) ? d.list : [], removed = d && Array.isArray(d.removed) ? d.removed : [];
+    const saved = new Map(); for (const st of list) if (st && typeof st.key === 'string') saved.set(st.key, st);
+    const gone = new Set(); for (const r of removed) if (r && typeof r.key === 'string') gone.add(r.key);
+    for (const st of Students.list) { const c = saved.get(st.key); if (!c || (st.t || 0) > (isNum(c.t) ? c.t : 0)) return true; }
+    for (const r of Students.removed.slice(-200)) if (!gone.has(r.key)) return true;
+    return false;
+  },
+  studentsJ() { return JSON.stringify({ list: Students.list, removed: Students.removed.slice(-200) }); },
+  /* after a change on this device: save whichever parts the saved copy is missing */
+  saveTutor() { if (this.studentsAhead(this.tutorDoc)) this.pushStudents(); this.pushLook(); },
+  /* a brake for anything that saves settings: a handful of saves a minute is normal, a stream of them never is */
+  recent: [],
+  allowSave() {
+    const now = Date.now(); this.recent = this.recent.filter(t => now - t < 60000);
+    if (this.recent.length >= 12) { if (!this.braked) { this.braked = true; console.warn('Settings are being saved too often; pausing those saves on this device.'); } return false; }
+    this.recent.push(now); return true;
+  },
   pushStudents() {
-    if (!this.ok) return;
+    if (!this.ok || !this.allowSave()) return;
     const F = this.F;
     F.setDoc(F.doc(this.db, 'tutors', TUTOR_CODE), { j: this.studentsJ() }).catch(err => this.fail(err));
+  },
+  pushLook() {
+    if (!this.ok || JOIN_CODE || !this.lookSeen) return;
+    const mine = myLook();
+    if (this.cloudLook && !lookBeats(mine, this.cloudLook)) return;
+    if (!this.allowSave()) return;
+    const F = this.F;
+    this.cloudLook = mine;
+    F.setDoc(F.doc(this.db, 'tutors', TUTOR_CODE + '_look'), { j: JSON.stringify(mine) }).catch(err => this.fail(err));
   },
   fail(err) {
     console.warn('Online saving error', err);
@@ -2816,7 +2861,7 @@ const TutorSync = {
     if (this.role === 'host' && changed) { const m = this.payload(); for (const [id, c] of this.conns) if (id !== from && c.open) try { c.send(m); } catch {} }
     if (this.role === 'host' && from !== 'host') { const c = this.conns.get(from); if (c && c.open) try { c.send(this.payload()); } catch {} }
   },
-  push() { Cloud.pushStudents(); const m = this.payload(); if (this.role === 'host') { for (const c of this.conns.values()) if (c.open) try { c.send(m); } catch {} } else if (this.hostConn && this.hostConn.open) try { this.hostConn.send(m); } catch {} },
+  push() { Cloud.saveTutor(); const m = this.payload(); if (this.role === 'host') { for (const c of this.conns.values()) if (c.open) try { c.send(m); } catch {} } else if (this.hostConn && this.hostConn.open) try { this.hostConn.send(m); } catch {} },
   linkedCount() { return this.role === 'host' ? this.conns.size : this.hostConn ? 1 : 0; },
 };
 let activeBoard = (() => {
