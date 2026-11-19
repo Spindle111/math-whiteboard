@@ -218,6 +218,8 @@ body.student-locked #pageLabel{pointer-events:none}
 .keys{display:grid;grid-template-columns:1fr auto;gap:6px 18px;font-size:13.5px;margin-bottom:14px;max-height:60vh;overflow:auto}
 .keys kbd{font-family:inherit;background:var(--panel-2);border:1px solid var(--line);border-bottom-width:2px;border-radius:6px;padding:1px 7px;font-size:12px;font-weight:600}
 
+#syncWarn{position:fixed;left:50%;bottom:14px;transform:translateX(-50%);background:#b25e00;color:#fff;padding:7px 14px;border-radius:999px;font-size:13px;font-weight:600;z-index:65;display:none;max-width:calc(100vw - 30px);text-align:center;box-shadow:0 2px 10px rgba(0,0,0,.25);pointer-events:none}
+#syncWarn.show{display:block}
 #toast{position:fixed;left:50%;top:var(--tb,66px);transform:translateX(-50%) translateY(-8px);background:#1d2330;color:#fff;padding:9px 14px;border-radius:10px;font-size:13.5px;z-index:70;opacity:0;pointer-events:none;transition:all .18s;max-width:calc(100vw - 40px)}
 #toast.show{opacity:1;transform:translateX(-50%)}
 #syncing{position:fixed;right:12px;top:62px;font-size:12px;color:var(--muted);z-index:18;display:none}
@@ -403,6 +405,7 @@ body.student-locked #pageLabel{pointer-events:none}
 <div class="pop panel" id="gridPop"><div class="cgrid" id="cgrid"></div><div class="crecent" id="crecent"></div></div>
 <button id="selTrash" title="Delete" aria-label="Delete selection"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"/></svg></button>
 <div id="toast"></div>
+<div id="syncWarn"></div>
 <div id="syncing">Syncing board…</div>
 <div class="tip" id="tip"></div>
 <input type="file" id="imgFile" accept="application/pdf,.pdf,image/*" hidden>
@@ -660,6 +663,7 @@ function afterChange() {
   }
   renderSelection();
   scheduleSave();
+  Blobs.sweepSoon();
 }
 
 /* =========================================================
@@ -939,7 +943,7 @@ function buildEl(r) {
     case 'graph': g = graphEl(r); break;
     case 'numline': g = numlineEl(r); break;
     case 'image': {
-      const im = el('image', { href: r.src, x: r.x, y: r.y, width: r.w, height: r.h, preserveAspectRatio: 'none' });
+      const im = el('image', { href: Blobs.href(r), x: r.x, y: r.y, width: r.w, height: r.h, preserveAspectRatio: 'none' });
       if (Array.isArray(r.holes) && r.holes.length) {
         g = el('g');
         const mid = 'hm-' + r.id + '-' + Math.random().toString(36).slice(2, 6);
@@ -1851,6 +1855,115 @@ $$('.editor [data-close]').forEach(b => b.onclick = closeEditors);
    Images
    ========================================================= */
 const LOCAL_IMG = {};
+/* Pictures (PDF pages, photos) are kept apart from the board's records. A record only names its picture
+   ("ref:<id>"); the picture itself is saved once, and each device downloads it once and keeps it.
+   That way moving, erasing on or re-opening a worksheet never sends the picture again. */
+const BLOB_RE = /^ref:([a-f0-9]{32})$/, DATA_IMG_RE = /^data:image\/(png|jpeg|gif|webp);base64,/;
+const blobIdOf = r => { const m = r && r.t === 'image' && typeof r.src === 'string' ? BLOB_RE.exec(r.src) : null; return m ? m[1] : null; };
+const LOADING_IMG = 'data:image/svg+xml,' + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="8" height="8"><rect width="8" height="8" fill="#8a93a3" fill-opacity=".14"/></svg>');
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const Blobs = {
+  mem: new Map(), known: new Set(), loading: new Map(), missing: new Map(), idxT: 0, chaseT: 0, sweepT: 0, sweeping: false,
+  async init() { const l = await idb.get('mb.blobs'); if (Array.isArray(l)) for (const id of l) if (typeof id === 'string') this.known.add(id); },
+  saveIdx() { clearTimeout(this.idxT); this.idxT = setTimeout(() => idb.set('mb.blobs', [...this.known]), 400); },
+  /* what to draw for an image record right now */
+  href(r) { const id = blobIdOf(r); if (!id) return r.src; const d = this.mem.get(id); if (d) return d; this.want(id); return LOADING_IMG; },
+  /* the picture, from memory or this device's storage (null if this device doesn't have it yet) */
+  want(id) {
+    if (this.mem.has(id)) return Promise.resolve(this.mem.get(id));
+    if (this.loading.has(id)) return this.loading.get(id);
+    const p = idb.get('mb.blob.' + id).then(d => {
+      this.loading.delete(id);
+      if (this.mem.has(id)) return this.mem.get(id);
+      if (typeof d === 'string' && DATA_IMG_RE.test(d)) { this.mem.set(id, d); if (!this.known.has(id)) { this.known.add(id); this.saveIdx(); } this.missing.delete(id); this.ready(id); return d; }
+      if (this.known.delete(id)) this.saveIdx();
+      if (!this.missing.has(id)) { this.missing.set(id, { since: Date.now(), cloud: 0, asked: 0 }); this.chase(); }
+      return null;
+    });
+    this.loading.set(id, p); return p;
+  },
+  put(id, d) {
+    const had = this.known.has(id);
+    if (!had) { this.known.add(id); this.saveIdx(); idb.set('mb.blob.' + id, d); }
+    const waiting = this.missing.delete(id);
+    if ((waiting || this.loading.has(id)) && !this.mem.has(id)) { this.mem.set(id, d); this.ready(id); }
+    return !had;
+  },
+  /* a picture arriving from the online copy or from another device */
+  accept(r) {
+    if (!r || typeof r.id !== 'string' || !/^b_[a-f0-9]{32}$/.test(r.id) || typeof r.d !== 'string' || r.d.length > 6e6 || !DATA_IMG_RE.test(r.d)) return false;
+    return this.put(r.id.slice(2), r.d);
+  },
+  rec(id, d) { return { id: 'b_' + id, k: 'blob', d }; },
+  ready(id) {
+    let hit = false;
+    for (const r of recs.values()) if (!r.del && blobIdOf(r) === id) {
+      hit = true;
+      if (r.page === curPage) renderItem(r);
+      const h = thumbCache.get(r.page); if (h) { try { URL.revokeObjectURL(h.url); } catch {} thumbCache.delete(r.page); }
+    }
+    if (hit) { renderSelection(); refreshPagePane(false); }
+  },
+  async hash(d) {
+    try { const h = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(d)); return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, '0')).join('').slice(0, 32); }
+    catch { let x = ''; for (const b of crypto.getRandomValues(new Uint8Array(16))) x += b.toString(16).padStart(2, '0'); return x; }
+  },
+  /* store a new picture; returns the name a record uses for it */
+  async add(d) {
+    const id = await this.hash(d);
+    this.mem.set(id, d);
+    if (!this.known.has(id)) { this.known.add(id); this.saveIdx(); idb.set('mb.blob.' + id, d); }
+    this.missing.delete(id);
+    Cloud.write([this.rec(id, d)]);
+    return 'ref:' + id;
+  },
+  /* make sure the online copy of this board has the picture (used when a picture is pasted onto another board) */
+  announce(id) { this.want(id).then(d => { if (d) Cloud.write([this.rec(id, d)]); }); },
+  refs() { const ids = new Set(); for (const r of recs.values()) { if (r.del) continue; const id = blobIdOf(r); if (id) ids.add(id); } return ids; },
+  async loadAll() { await Promise.all([...this.refs()].map(id => this.want(id))); },
+  reset() { this.missing.clear(); },
+  /* a picture this device still doesn't have after a few seconds: fetch it directly, then ask the other devices */
+  chase() {
+    if (this.chaseT) return;
+    this.chaseT = setInterval(() => {
+      const refs = this.refs(), now = Date.now(), ask = [];
+      for (const [id, m] of this.missing) {
+        if (!refs.has(id) || this.known.has(id)) { this.missing.delete(id); continue; }
+        if (now - m.since > 2500 && now - m.cloud > 20000) { m.cloud = now; Cloud.fetchBlob(id); }
+        else if (now - m.since > 6000 && now - m.asked > 15000) { m.asked = now; ask.push(id); }
+      }
+      if (ask.length) Live.sendRaw({ type: 'blobReq', ids: ask.slice(0, 200) });
+      if (!this.missing.size) { clearInterval(this.chaseT); this.chaseT = 0; }
+    }, 1500);
+  },
+  /* another device asked for pictures: send the ones this device has, one at a time, without clogging the line */
+  async serve(ids, conn) {
+    for (const id of ids) {
+      if (typeof id !== 'string' || !/^[a-f0-9]{32}$/.test(id) || !this.known.has(id)) continue;
+      const d = await this.want(id); if (!d) continue;
+      for (let i = 0; i < 300 && conn.open && conn.dataChannel && conn.dataChannel.bufferedAmount > 1e6; i++) await sleep(100);
+      if (!conn.open) return;
+      try { conn.send({ type: 'op', r: [this.rec(id, d)] }); } catch { return; }
+    }
+  },
+  /* older boards keep each picture inside its record: move those out (tutor's devices only, a few seconds after opening) */
+  sweepSoon(ms) { if (JOIN_CODE) return; clearTimeout(this.sweepT); this.sweepT = setTimeout(() => this.sweep(), ms || 3000 + Math.random() * 5000); },
+  async sweep() {
+    if (this.sweeping || JOIN_CODE) return; this.sweeping = true;
+    const key = BOARD_KEY;
+    try {
+      for (const r0 of [...recs.values()]) {
+        if (BOARD_KEY !== key) break;
+        if (r0.k !== 'item' || r0.del || r0.t !== 'image' || typeof r0.src !== 'string' || !DATA_IMG_RE.test(r0.src)) continue;
+        const src = r0.src, ref = await this.add(src);
+        if (BOARD_KEY !== key) break;
+        const cur = recs.get(r0.id);
+        if (cur && !cur.del && cur.src === src) putRecords([Object.assign({}, cur, { src: ref })]);
+        await sleep(20);
+      }
+    } finally { this.sweeping = false; }
+  },
+};
 
 /* =========================================================
    PDF import (pages become images you can write on)
@@ -1997,6 +2110,7 @@ async function importPdf(file) {
       page.cleanup();
     }
     doc.destroy();
+    for (const s of shots) s.src = await Blobs.add(s.src);
     const W = 760, list = [];
     const ps = pages(), idx = ps.findIndex(p => p.id === curPage);
     const a = ps[idx] ? ps[idx].z : 0, b = ps[idx + 1] ? ps[idx + 1].z : a + 2000;
@@ -2038,8 +2152,11 @@ function insertImageFile(file, at) {
       while (src.length > 900000 && q > .45) { src = cvs.toDataURL('image/jpeg', q); q -= .12; }
       while (src.length > 900000 && cvs.width > 500) { const c2 = document.createElement('canvas'); c2.width = Math.round(cvs.width * .8); c2.height = Math.round(cvs.height * .8); c2.getContext('2d').drawImage(cvs, 0, 0, c2.width, c2.height); cvs = c2; src = cvs.toDataURL('image/jpeg', .7); }
       const c = at || viewCenter(), sz = sheet(); let dw = Math.min(560, cw, sz.w * .8), dh = dw * ch / cw; if (dh > sz.h * .8) { dh = sz.h * .8; dw = dh * cw / ch; }
-      const r = { id: uid(), k: 'item', del: 0, page: curPage, z: nextZ(), t: 'image', x: rd(c.x - dw / 2), y: rd(c.y - dh / 2), w: rd(dw), h: rd(dh) , src };
-      commit([r]); setTool('select'); selection.add(r.id); renderSelection();
+      const pid = curPage;
+      Blobs.add(src).then(ref => {
+        const r = { id: uid(), k: 'item', del: 0, page: pid, z: nextZ(), t: 'image', x: rd(c.x - dw / 2), y: rd(c.y - dh / 2), w: rd(dw), h: rd(dh), src: ref };
+        commit([r]); if (pid === curPage) { setTool('select'); selection.add(r.id); renderSelection(); }
+      });
     };
     img.src = fr.result;
   };
@@ -2080,6 +2197,7 @@ function pasteItems(off = 24) {
   if (!clipboardItems.length) return;
   const list = clipboardItems.map(r => { const n = translated(r, off, off); n.id = uid(); n.page = curPage; n.z = nextZ(); delete n.v; delete n.a; return n; });
   commit(list); clipboardItems = list.map(clone);
+  for (const r of list) { const b = blobIdOf(r); if (b) Blobs.announce(b); }
   setTool('select'); selection.clear(); list.forEach(r => selection.add(r.id)); renderSelection();
 }
 function deleteSel() { if (!selection.size) return; commit([...selection].map(id => Object.assign(clone(recs.get(id)), { del: 1 }))); clearSelection(); }
@@ -2480,7 +2598,7 @@ let saveT;
 function scheduleSave() { clearTimeout(saveT); saveT = setTimeout(saveLocal, 700); }
 let warnedQuota = false;
 async function saveLocal() {
-  const key = BOARD_KEY, data = { v: 1, recs: [...recs.values()].map(r => r.del ? stripDel(r) : r), cur: curPage, views: { ...views } };
+  const key = BOARD_KEY, data = { v: 1, recs: [...recs.values()].map(r => r.del ? stripDel(r) : r), cur: curPage, views: { ...views }, syncId: Cloud.currentBoardId(), syncT: Cloud.syncT, dirty: [...Cloud.dirty.keys()] };
   if (await idb.set(key, data)) return;
   if (!store.set(key, data)) {
     store.set(key, Object.assign({}, data, { recs: data.recs.filter(r => r.t !== 'image') }));
@@ -2568,6 +2686,7 @@ async function exportBoardPDF() {
     toast('Preparing PDF…', 30000);
     let JsPDF; try { JsPDF = await loadJsPdf(); } catch { toast('Couldn’t load the PDF maker — check your internet connection.', 4000); return; }
     const ps = pages(); let doc = null;
+    await Blobs.loadAll();
     for (let i = 0; i < ps.length; i++) {
       toast(`Preparing PDF… page ${i + 1} of ${ps.length}`, 30000);
       const sz = sheet(ps[i].id), PB = pageBounds(ps[i].id);
@@ -2633,7 +2752,7 @@ function validRec(r, fromFile) {
     case 'math': if (!(isNum(r.x) && isNum(r.y) && isNum(r.size) && isStr(r.tex, 1500))) return false; r.tex = sanitizeTex(r.tex); return true;
     case 'graph': return ['x', 'y', 'w', 'h', 'xmin', 'xmax', 'ymin', 'ymax'].every(k => isNum(r[k])) && Array.isArray(r.fns) && r.fns.length <= 8 && r.fns.every(f => f && isStr(f.e, 200) && COLORS[f.c]);
     case 'numline': return ['x', 'y', 'w', 'min', 'max', 'step'].every(k => isNum(r[k])) && (r.marks === undefined || isStr(r.marks, 200));
-    case 'image': if (r.holes !== undefined && !(Array.isArray(r.holes) && r.holes.length <= 300 && r.holes.every(h => h && isNum(h.w) && Array.isArray(h.pts) && h.pts.length > 0 && h.pts.length <= 3000 && h.pts.every(q => Array.isArray(q) && isNum(q[0]) && isNum(q[1]))))) return false; if (r.fn !== undefined && !isStr(r.fn, 80)) return false; if (r.pn !== undefined && !isNum(r.pn)) return false; return isNum(r.x) && isNum(r.y) && isNum(r.w) && isNum(r.h) && typeof r.src === 'string' && r.src.length < 6e6 && /^data:image\/(png|jpeg|gif|webp);base64,/.test(r.src);
+    case 'image': if (r.holes !== undefined && !(Array.isArray(r.holes) && r.holes.length <= 300 && r.holes.every(h => h && isNum(h.w) && Array.isArray(h.pts) && h.pts.length > 0 && h.pts.length <= 3000 && h.pts.every(q => Array.isArray(q) && isNum(q[0]) && isNum(q[1]))))) return false; if (r.fn !== undefined && !isStr(r.fn, 80)) return false; if (r.pn !== undefined && !isNum(r.pn)) return false; return isNum(r.x) && isNum(r.y) && isNum(r.w) && isNum(r.h) && typeof r.src === 'string' && (BLOB_RE.test(r.src) || (r.src.length < 6e6 && DATA_IMG_RE.test(r.src)));
   }
   return false;
 }
@@ -2643,7 +2762,6 @@ function validRec(r, fromFile) {
    ========================================================= */
 const randCode = (n = 7) => { const a = 'abcdefghjkmnpqrstuvwxyz23456789'; let s = ''; const r = crypto.getRandomValues(new Uint8Array(n)); for (const x of r) s += a[x % a.length]; return s; };
 const PEER_OPTS = Object.assign({ debug: 0 }, window.MB_PEER_OPTS || {});
-const fullRecs = () => [...recs.values()].map(r => r.del ? stripDel(r) : r);
 const TUTOR_CODE = (() => { let c = store.get('mb.tutorCode', null); if (!(typeof c === 'string' && /^[a-z0-9]{6,12}$/.test(c))) { c = randCode(8); store.set('mb.tutorCode', c); } return c; })();
 const baseUrl = () => location.origin + location.pathname;
 
@@ -2675,54 +2793,141 @@ const Cloud = {
     } catch (e) { console.warn('Online saving unavailable', e); this.tried = true; syncLook(); }
   },
   currentBoardId() { return JOIN_CODE || activeBoard || ('my' + TUTOR_CODE); },
+  /* Where this device is up to with the online copy of the open board. Kept with the board's local copy:
+     syncT = the newest online change this device has already seen, dirty = changes not yet saved online. */
+  syncT: 0, dirty: new Map(), seq: 0, noT: !!store.get('mb.noT', false), listenErr: 0, retryN: 0, subT: 0, saveFails: 0,
+  loadState(saved) {
+    const mine = saved && saved.syncId === this.currentBoardId();
+    this.syncT = mine && isNum(saved.syncT) && saved.syncT > 0 ? saved.syncT : 0;
+    this.dirty = new Map();
+    if (mine && Array.isArray(saved.dirty)) for (const id of saved.dirty) if (isStr(id, 48) && id) this.dirty.set(id, { t: Date.now(), s: 0 });
+  },
+  closeBoard() {
+    clearTimeout(this.subT);
+    if (this.unsubBoard) { try { this.unsubBoard(); } catch {} }
+    this.unsubBoard = null; this.boardId = null; this.listenErr = 0;
+  },
   openBoard() {
     if (!this.ok) return;
     const id = this.currentBoardId();
     if (id === this.boardId && this.unsubBoard) return;
-    if (this.unsubBoard) { try { this.unsubBoard(); } catch {} }
+    this.closeBoard();
     this.boardId = id; this.firstSnap = false;
-    const F = this.F;
-    this.unsubBoard = F.onSnapshot(F.collection(this.db, 'boards', id, 'recs'), snap => {
+    const F = this.F, col = F.collection(this.db, 'boards', id, 'recs');
+    /* a device that has synced this board before only asks for what changed since then */
+    const full = !(this.syncT > 0) || this.noT;
+    const q = full ? col : F.query(col, F.where('t', '>', F.Timestamp.fromMillis(this.syncT - 300000)));
+    this.unsubBoard = F.onSnapshot(q, snap => {
       if (this.boardId !== id) return;
-      let any = false;
+      this.listenErr = 0; this.retryN = 0;
+      let any = false, maxT = 0;
       for (const ch of snap.docChanges()) {
         if (ch.type === 'removed') continue;
-        let r; try { r = JSON.parse(ch.doc.data().j); } catch { continue; }
+        const data = ch.doc.data();
+        const t = data && data.t && typeof data.t.toMillis === 'function' ? data.t.toMillis() : 0; if (t > maxT) maxT = t;
+        let r; try { r = JSON.parse(data.j); } catch { continue; }
+        if (r && r.k === 'blob') { Blobs.accept(r); continue; }
         if (validRec(r, false) && applyRec(r)) any = true;
       }
       if (any) { afterChange(); if (Live.syncHostPage) Live.syncHostPage(); }
+      if (maxT > this.syncT) { this.syncT = maxT; scheduleSave(); }
       if (!this.firstSnap) {
         this.firstSnap = true;
-        const cloud = new Map();
-        snap.docs.forEach(d => { try { const r = JSON.parse(d.data().j); cloud.set(r.id, r); } catch {} });
-        const up = [...recs.values()].filter(r => { const c = cloud.get(r.id); return !c || newer(r, c); });
-        if (up.length) this.write(up);
+        if (full) {
+          /* first time on this device: also save online anything only this device has */
+          const cloud = new Map();
+          snap.docs.forEach(d => { try { const r = JSON.parse(d.data().j); cloud.set(r.id, r.k === 'blob' ? 1 : r); } catch {} });
+          const up = [...recs.values()].filter(r => { const c = cloud.get(r.id); return !c || newer(r, c); });
+          if (up.length) this.write(up);
+          for (const b of Blobs.refs()) if (!cloud.has('b_' + b) && Blobs.known.has(b)) Blobs.announce(b);
+        }
+        this.requeue();
         syncLook();
       }
-    }, err => this.fail(err));
+    }, err => {
+      if (this.boardId !== id) return;
+      this.fail(err); this.listenErr = Date.now();
+      try { this.unsubBoard && this.unsubBoard(); } catch {}
+      this.unsubBoard = null;
+      clearTimeout(this.subT); this.subT = setTimeout(() => this.openBoard(), Math.min(120000, 5000 * 2 ** this.retryN++));
+    });
+  },
+  /* changes made earlier that never reached the online copy (offline, closed tab, an error): send them now */
+  requeue() {
+    const bid = this.boardId, dirty = this.dirty, list = [];
+    for (const id of [...dirty.keys()]) {
+      if (id.startsWith('b_')) { const b = id.slice(2); Blobs.want(b).then(d => { if (this.dirty !== dirty) return; if (d && this.boardId === bid) this.write([Blobs.rec(b, d)]); else if (!d) dirty.delete(id); }); }
+      else { const r = recs.get(id); if (r) list.push(r); else dirty.delete(id); }
+    }
+    if (list.length) this.write(list);
   },
   write(list) {
-    if (!this.ok || !list || !list.length) return;
+    if (!list || !list.length) return;
+    const now = Date.now();
+    for (const r of list) { const e = this.dirty.get(r.id); this.dirty.set(r.id, { t: e ? e.t : now, s: ++this.seq }); }
+    if (!this.ok) return;
     const id = this.boardId || this.currentBoardId();
     if (this.pendingBoard && this.pendingBoard !== id) this.flushNow();
     this.pendingBoard = id;
     for (const r of list) this.pending.set(r.id, r);
-    clearTimeout(this.flushT); this.flushT = setTimeout(() => this.flushNow(), 500);
+    clearTimeout(this.flushT); this.flushT = setTimeout(() => this.flushNow(), 300);
   },
   flushNow() {
     clearTimeout(this.flushT);
     if (!this.ok || !this.pending.size) return Promise.resolve();
-    const F = this.F, id = this.pendingBoard, items = [...this.pending.values()];
+    const F = this.F, id = this.pendingBoard, dirty = this.dirty, items = [...this.pending.values()];
     this.pending.clear();
-    const commits = []; let batch = F.writeBatch(this.db), n = 0, size = 0;
-    for (const r0 of items) {
-      const j = JSON.stringify(r0.del ? stripDel(r0) : r0);
-      if (j.length > 1040000) continue;
-      if (n && (n >= 400 || size + j.length > 7.5e6)) { commits.push(batch.commit()); batch = F.writeBatch(this.db); n = 0; size = 0; }
-      batch.set(F.doc(this.db, 'boards', id, 'recs', r0.id), { j }); n++; size += j.length;
+    const body = j => this.noT ? { j } : { j, t: F.serverTimestamp() };
+    const ref = x => F.doc(this.db, 'boards', id, 'recs', x.r.id);
+    const groups = []; let cur = [], size = 0;
+    for (const r of items) {
+      const j = JSON.stringify(r.del ? stripDel(r) : r), e = dirty.get(r.id);
+      if (j.length > 1040000) { dirty.delete(r.id); continue; }
+      if (cur.length && (cur.length >= 400 || size + j.length > 7.5e6)) { groups.push(cur); cur = []; size = 0; }
+      cur.push({ r, j, s: e ? e.s : -1 }); size += j.length;
     }
-    if (n) commits.push(batch.commit());
-    return Promise.all(commits).catch(err => this.fail(err));
+    if (cur.length) groups.push(cur);
+    const saved = x => { const e = dirty.get(x.r.id); if (e && e.s === x.s) { dirty.delete(x.r.id); scheduleSave(); } };
+    const one = g => {
+      const batch = F.writeBatch(this.db);
+      for (const x of g) batch.set(ref(x), body(x.j));
+      return batch.commit().then(() => { g.forEach(saved); this.saveFails = 0; }, async err => {
+        /* the group failed: try each change on its own so one bad one can't hold back the rest, and keep whatever still fails for another try */
+        if (err && err.code === 'permission-denied' && !this.noT) { this.noT = true; store.set('mb.noT', true); }
+        const res = await Promise.allSettled(g.map(x => F.setDoc(ref(x), body(x.j))));
+        let failed = 0;
+        res.forEach((o, i) => {
+          const x = g[i];
+          if (o.status === 'fulfilled') { saved(x); return; }
+          failed++;
+          if (this.dirty === dirty && !this.pending.has(x.r.id) && (!this.pendingBoard || this.pendingBoard === id || !this.pending.size)) { this.pendingBoard = id; this.pending.set(x.r.id, x.r); }
+        });
+        if (failed) {
+          this.fail(err); this.saveFails++;
+          clearTimeout(this.flushT); this.flushT = setTimeout(() => this.flushNow(), Math.min(120000, 4000 * 2 ** Math.min(this.saveFails, 5)));
+        } else this.saveFails = 0;
+      });
+    };
+    return Promise.all(groups.map(one));
+  },
+  /* fetch one picture directly */
+  fetchBlob(b) {
+    if (!this.ok || !this.boardId) return;
+    const F = this.F, id = this.boardId;
+    F.getDoc(F.doc(this.db, 'boards', id, 'recs', 'b_' + b)).then(snap => {
+      if (this.boardId !== id || !snap.exists()) return;
+      try { Blobs.accept(JSON.parse(snap.data().j)); } catch {}
+    }).catch(() => {});
+  },
+  /* what to tell the person about syncing, or null when all is well */
+  status() {
+    if (navigator.onLine === false) return 'offline';
+    if (!this.tried) return null;
+    let oldest = Infinity; for (const e of this.dirty.values()) if (e.t < oldest) oldest = e.t;
+    const behind = Date.now() - oldest > 12000;
+    if (!this.ok) return behind ? 'off' : null;
+    if (this.listenErr || behind) return 'behind';
+    return null;
   },
   openTutor() {
     const F = this.F, ref = F.doc(this.db, 'tutors', TUTOR_CODE);
@@ -2791,6 +2996,17 @@ const Cloud = {
   },
 };
 window.addEventListener('pagehide', () => { Cloud.flushNow(); });
+function updateSyncWarn() {
+  const st = Cloud.status(), w = $('#syncWarn'); if (!w) return;
+  const others = Live.connected && Live.others().length > 0;
+  const txt = st === 'offline' ? 'No internet — your work is saved on this device and will sync when you’re back online'
+    : st === 'behind' ? 'Not synced yet — still trying. Your work is saved on this device.'
+    : st === 'off' ? (others ? 'Online saving isn’t working — changes are only being shared live' : 'Online saving isn’t working — your work is only on this device')
+    : '';
+  w.textContent = txt; w.classList.toggle('show', !!txt);
+}
+window.addEventListener('online', () => { Cloud.saveFails = 0; Cloud.requeue(); Cloud.flushNow(); updateSyncWarn(); });
+window.addEventListener('offline', updateSyncWarn);
 
 const okStu = x => x && typeof x.key === 'string' && /^[a-z0-9]{6,16}$/.test(x.key) && typeof x.name === 'string' && x.name.length <= 40;
 const Students = {
@@ -2884,7 +3100,8 @@ async function switchBoard(key) {
   if (key === activeBoard) return;
   switching = (async () => {
     closeEditors(); closePops(); clearSelection();
-    clearTimeout(saveT); await saveLocal(); await Cloud.flushNow();
+    clearTimeout(saveT); await Promise.race([Cloud.flushNow(), sleep(3000)]); await saveLocal();
+    Cloud.closeBoard(); Blobs.reset();
     Live.beforeSwitch(key);
     activeBoard = key; store.set('mb.activeBoard', key);
     BOARD_KEY = key ? 'mb.board.s.' + key : 'mb.board';
@@ -2948,7 +3165,7 @@ const Live = {
     peer.on('open', id => { this.connected = true; this.me = id; this.refreshPeers(); });
     peer.on('connection', conn => {
       conn.on('open', () => this.route(conn));
-      conn.on('data', d => { if (this.conns.has(conn.peer)) this.onData(d, conn.peer); });
+      conn.on('data', d => { if (this.conns.has(conn.peer)) this.onData(d, conn.peer); else if (d && d.type === 'hello') this.route(conn); });
       const gone = () => {
         if (!this.conns.has(conn.peer)) return;
         this.conns.delete(conn.peer); this.presMap.delete(conn.peer);
@@ -2996,13 +3213,27 @@ const Live = {
     this.pending.delete(conn.peer);
     this.conns.set(conn.peer, { conn, s: target });
     this.presMap.set(conn.peer, { pres: {}, t: Date.now() });
-    try {
-      conn.send({ type: 'welcome', board: target ? boardName(target) : null });
-      conn.send({ type: 'state', r: fullRecs() });
-      conn.send({ type: 'presAll', list: [[this.me, this.myPres], ...[...this.presMap].filter(([k]) => k !== conn.peer).map(([k, v]) => [k, v.pres])] });
-    } catch {}
+    this.greet(conn, target);
     this.renderNotice(); this.refreshPeers();
     if (target) toast(`Someone joined ${boardName(target)}’s board`);
+  },
+  greet(conn, target) {
+    try {
+      conn.send({ type: 'welcome', board: target ? boardName(target) : null });
+      conn.send(this.haveMsg());
+      conn.send({ type: 'presAll', list: [[this.me, this.myPres], ...[...this.presMap].filter(([k]) => k !== conn.peer).map(([k, v]) => [k, v.pres])] });
+    } catch {}
+  },
+  /* a joining device keeps saying hello until the tutor's device answers; if it never does, it starts the connection over */
+  hello(c) {
+    let n = 0;
+    const tick = () => {
+      if (this.hostConn !== c || !c.open || this.status !== 'knocking') return;
+      if (n++ >= 6) { try { c.close(); } catch {} return; }
+      try { c.send({ type: 'hello' }); } catch {}
+      setTimeout(tick, 1500);
+    };
+    setTimeout(tick, 700);
   },
   beforeSwitch(key) { this.stopHost(); },
   afterSwitch(key) { setTimeout(() => this.ensureHost(), 400); },
@@ -3032,7 +3263,7 @@ const Live = {
     const c = this.peer.connect('mtb-' + this.code, { reliable: true, metadata: { s: this.code } });
     const t = setTimeout(() => { if (!c.open) { this.connecting = false; try { c.close(); } catch {} this.retry(); } }, 12000);
     this.connAttempt = c;
-    c.on('open', () => { clearTimeout(t); this.connecting = false; this.hostConn = c; if (this.status !== 'connected') this.status = 'knocking'; this.renderChip(); });
+    c.on('open', () => { clearTimeout(t); this.connecting = false; this.hostConn = c; if (this.status !== 'connected') this.status = 'knocking'; this.renderChip(); this.hello(c); });
     c.on('data', d => this.onData(d, 'host'));
     c.on('close', () => {
       clearTimeout(t); this.connecting = false;
@@ -3051,19 +3282,39 @@ const Live = {
     if (from === 'host') {
       if (d.type === 'denied') { this.status = 'denied'; this.renderChip(); this.renderPop(); toast('This link isn’t active anymore — ask your tutor for a new one.', 6000); return; }
       if (d.type === 'wait') { this.status = 'admit'; this.renderChip(); this.renderPop(); toast('Your tutor will let you in shortly…', 4000); return; }
-      if (d.type === 'welcome') { if (!this.hostConn && this.connAttempt) this.hostConn = this.connAttempt; this.connecting = false; this.status = 'connected'; this.connected = true; try { this.hostConn.send({ type: 'state', r: fullRecs() }); } catch {} this.presDirty = true; this.flushPres(); this.renderChip(); this.renderPop(); toast(this.tutorClient ? 'Synced with your other device' : 'Connected to the live board'); this.syncHostPage(); return; }
+      if (d.type === 'welcome') { const again = this.status === 'connected'; if (!this.hostConn && this.connAttempt) this.hostConn = this.connAttempt; this.connecting = false; this.status = 'connected'; this.connected = true; try { this.hostConn.send(this.haveMsg()); } catch {} this.presDirty = true; this.flushPres(); this.renderChip(); this.renderPop(); if (!again) toast(this.tutorClient ? 'Synced with your other device' : 'Connected to the live board'); this.syncHostPage(); return; }
       if (d.type === 'bye') { this.status = 'switched'; this.connected = false; this.renderChip(); if (!this.tutorClient) toast('Your tutor stepped away from your board — you’ll reconnect when they’re back.', 5000); return; }
     }
+    if (d.type === 'hello') { if (this.role === 'host') { const c = this.conns.get(from); if (c) this.greet(c.conn, c.s); } return; }
     if (d.type === 'state' || d.type === 'op') {
       if (!Array.isArray(d.r) || d.r.length > 20000) return;
       if (from === 'host' && this.role === 'student' && this.status !== 'connected') {
         if (!this.hostConn && this.connAttempt) this.hostConn = this.connAttempt;
         this.connecting = false; this.status = 'connected'; this.connected = true; this.presDirty = true; this.renderChip();
-        if (d.type === 'state') try { this.hostConn.send({ type: 'state', r: fullRecs() }); } catch {}
       }
-      const ok = [];
-      for (const r of d.r) if (validRec(r, false) && applyRec(r)) ok.push(r);
-      if (ok.length) { afterChange(); this.syncHostPage(); if (this.role === 'host') { this.broadcast({ type: 'op', r: ok }, from); Cloud.write(ok); } }
+      const ok = [], pics = [];
+      for (const r of d.r) {
+        if (r && r.k === 'blob') { if (Blobs.accept(r)) pics.push(r); continue; }
+        if (validRec(r, false) && applyRec(r)) ok.push(r);
+      }
+      if (ok.length) { afterChange(); this.syncHostPage(); if (this.role === 'host') { for (const c of this.chunks(ok)) this.broadcast({ type: 'op', r: c }, from); Cloud.write(ok); } }
+      if (pics.length && this.role === 'host') { for (const b of pics) this.broadcast({ type: 'op', r: [b] }, from); Cloud.write(pics); }
+      return;
+    }
+    /* the other device lists what it has; reply with only what it is missing or has an older copy of */
+    if (d.type === 'have') {
+      if (!Array.isArray(d.m) || d.m.length > 60000) return;
+      const conn = from === 'host' ? this.hostConn : (this.conns.get(from) || {}).conn; if (!conn) return;
+      const seen = new Map();
+      for (const e of d.m) if (Array.isArray(e) && typeof e[0] === 'string' && isNum(e[1]) && typeof e[2] === 'string') seen.set(e[0], e);
+      const out = [];
+      for (const r of recs.values()) { const e = seen.get(r.id); if (!e || newer(r, { v: e[1], a: e[2] })) out.push(r.del ? stripDel(r) : r); }
+      for (const c of this.chunks(out)) try { conn.send({ type: 'op', r: c }); } catch {}
+      return;
+    }
+    if (d.type === 'blobReq') {
+      if (!Array.isArray(d.ids) || d.ids.length > 200) return;
+      const conn = from === 'host' ? this.hostConn : (this.conns.get(from) || {}).conn; if (conn) Blobs.serve(d.ids, conn);
       return;
     }
     if (d.type === 'pres') {
@@ -3088,9 +3339,23 @@ const Live = {
   },
   send(list) {
     if (!this.connected) return;
-    const r = list.map(x => x.del ? stripDel(x) : x);
-    if (this.role === 'host') this.broadcast({ type: 'op', r });
-    else if (this.hostConn && this.hostConn.open && this.status === 'connected') try { this.hostConn.send({ type: 'op', r }); } catch {}
+    for (const r of this.chunks(list.map(x => x.del ? stripDel(x) : x))) {
+      if (this.role === 'host') this.broadcast({ type: 'op', r });
+      else if (this.hostConn && this.hostConn.open && this.status === 'connected') try { this.hostConn.send({ type: 'op', r }); } catch {}
+    }
+  },
+  /* a short list of what this device has, so the other side can send just the difference */
+  haveMsg() { const m = []; for (const r of recs.values()) m.push([r.id, r.v, r.a]); return { type: 'have', m }; },
+  /* split a list of records into messages small enough to send quickly */
+  chunks(list) {
+    const out = []; let cur = [], size = 0;
+    for (const r of list) {
+      const n = r.t === 'image' || r.t === 'stroke' ? JSON.stringify(r).length : 400;
+      if (cur.length && (size + n > 200000 || cur.length >= 1500)) { out.push(cur); cur = []; size = 0; }
+      cur.push(r); size += n;
+    }
+    if (cur.length) out.push(cur);
+    return out;
   },
   setPres(patch) { for (const k in patch) { if (patch[k] === null) delete this.myPres[k]; else this.myPres[k] = patch[k]; } this.presDirty = true; },
   flushPres() {
@@ -3446,6 +3711,7 @@ async function loadBoard() {
     for (const r of saved.recs) if (validRec(r, true) && isNum(r.v)) { recs.set(r.id, r); clockV = Math.max(clockV, r.v); if (r.z > lastZ && r.k === 'item') lastZ = r.z; }
     if (saved.views && typeof saved.views === 'object') Object.assign(views, saved.views);
   }
+  Cloud.loadState(saved);
   ensurePage();
   const ps = pages();
   curPage = saved && ps.find(p => p.id === saved.cur) ? saved.cur : ps[0].id;
@@ -3457,11 +3723,14 @@ if (window.MathJax && MathJax.tex2svg) mathReady = true;
 buildPatterns();
 setTool('pen'); updateUndoUI(); updateBoardChip();
 (async () => {
+  await Blobs.init();
   await loadBoard();
   applySheet(); if (!V) V = defaultView();
   renderPage(); applyView(true); updatePageUI(); updateUndoUI(); syncAddressBar();
   syncLook();
   Live.init(); handlePairing(); Cloud.init();
+  Blobs.sweepSoon(9000);
+  setInterval(updateSyncWarn, 2000);
 })();
 window.addEventListener('resize', () => { refitView(fitKind); });
 
