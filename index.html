@@ -3379,6 +3379,7 @@ const Live = {
   isLockedStudent() { return !!JOIN_CODE && this.role === 'student' && !this.tutorClient && this.status === 'connected'; },
   syncHostPage() {
     document.body.classList.toggle('student-locked', this.isLockedStudent());
+    if (!JOIN_CODE) { if (!this.following) this.followTutorPage(); return; }
     if (this.role !== 'student' || this.following) return;
     if (this.isLockedStudent()) { this.followTutor(); return; }
     const h = this.presMap.get('mtb-' + this.code), v = h && h.pres && h.pres.view, p = v && v.p;
@@ -3386,6 +3387,28 @@ const Live = {
     const pr = recs.get(p); if (!pr || pr.del) return;
     if (!this.followPage || p === this.lastHostPage) return;
     this.lastHostPage = p;
+    if (p !== curPage) goPage(p);
+  },
+  /* the tutor's own devices keep to the same page: whichever one was touched last leads, the others go to its page */
+  followTutorPage() {
+    if (!this.followPage || !this.connected) return;
+    const hostId = this.code ? 'mtb-' + this.code : null;
+    for (const [peer, e] of this.presMap) {
+      const pr = e.pres || {};
+      if (!pr.tu && peer !== hostId) continue;
+      const act = isNum(pr.act) ? pr.act : 0, seen = this.tutorAct.get(peer);
+      this.tutorAct.set(peer, act);
+      if (seen !== undefined && act !== seen) this.leadPeer = peer;
+    }
+    const e = this.leadPeer && this.presMap.get(this.leadPeer); if (!e) return;
+    const v = (e.pres || {}).view, p = v && v.p;
+    if (!isStr(p, 48)) return;
+    const pg = recs.get(p); if (!pg || pg.del) return;
+    const key = this.leadPeer + '|' + p;
+    if (key === this.leadKey) return;
+    /* don't change page mid-stroke or mid-sentence: catch up as soon as it's finished */
+    if (action || pinch || textEdit) { if (!this.followTimer) this.followTimer = setInterval(() => { if (action || pinch || textEdit) return; clearInterval(this.followTimer); this.followTimer = 0; this.syncHostPage(); }, 150); return; }
+    this.leadKey = key;
     if (p !== curPage) goPage(p);
   },
   followTutor() {
