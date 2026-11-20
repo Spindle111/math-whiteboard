@@ -185,6 +185,12 @@ input.field{-webkit-user-select:text;user-select:text}
 #selTrash.show{display:grid}
 #selTrash svg{width:16px;height:16px}
 #selTrash:hover{background:#e03131;color:#fff;border-color:#e03131}
+/* page turning and new page: bottom right corner; it steps left of the Pages pane when that is open */
+#pageNav{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom, 0px));display:flex;align-items:center;gap:2px;padding:4px;z-index:17}
+#pageNav .ibtn{height:38px;min-width:36px}
+#pageNav .pagelabel{min-width:58px;padding:0 6px}
+body.pane-open #pageNav{right:calc(390px + 14px)}
+@media (max-width:700px){body.pane-open #pageNav{right:14px}#syncWarn{bottom:calc(70px + env(safe-area-inset-bottom, 0px))}}
 body.student-locked #prevPage,body.student-locked #nextPage,body.student-locked #addPage{display:none}
 body.student-locked #pageLabel{pointer-events:none}
 #toolbar .ibtn{height:40px;min-width:40px;border-radius:10px}
@@ -303,13 +309,14 @@ body.student-locked #pageLabel{pointer-events:none}
     <button class="ibtn" id="zoomLabel" data-tip="Reset to 100%">100%</button>
     <button class="ibtn" id="zoomIn" data-tip="Zoom in" data-key="+"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
     <button class="ibtn" id="zoomFit" data-tip="Fit page / fit width" data-key="Shift 1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
-    <div class="bsep"></div>
-    <button class="ibtn" id="prevPage" data-tip="Previous page" data-key="PgUp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
-    <button class="ibtn pagelabel" id="pageLabel" data-tip="Click to jump to a page">1 / 1</button>
-    <button class="ibtn" id="nextPage" data-tip="Next page" data-key="PgDn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
-    <button class="ibtn" id="addPage" data-tip="New page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
   </div>
 </header>
+<div id="pageNav" class="panel">
+  <button class="ibtn" id="prevPage" data-tip="Previous page" data-key="PgUp"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 6l-6 6 6 6"/></svg></button>
+  <button class="ibtn pagelabel" id="pageLabel" data-tip="Click to jump to a page">1 / 1</button>
+  <button class="ibtn" id="nextPage" data-tip="Next page" data-key="PgDn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg></button>
+  <button class="ibtn" id="addPage" data-tip="New page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
+</div>
 <div id="stylebar" class="panel">
   <div id="swatches" style="display:flex;gap:2px"></div>
   <div class="sep"></div>
@@ -2383,6 +2390,7 @@ $('#menuBtn').onclick = () => { buildMenuChips(); openPop($('#menuPop'), $('#men
 function setPagePane(open) {
   const p = $('#pagePop'), kind = fitKind, before = paneWidth();
   p.classList.toggle('open', open); store.set('pagePane', open ? 1 : 0);
+  document.body.classList.toggle('pane-open', open);
   $('#pageLabel').classList.toggle('on', open);
   if (open) buildPageList(true);
   requestAnimationFrame(() => refitView(kind, (before - paneWidth()) / 2));
