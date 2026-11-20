@@ -285,7 +285,6 @@ body.student-locked #pageLabel{pointer-events:none}
   </div>
   <nav id="toolbar">
     <button class="tbtn" data-tool="select" data-tip="Select & move" data-key="V"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linejoin="round"><path d="M5 3.5l13 6.5-5.6 1.8L10.6 17.5z"/><path d="M12.5 12l5 5" stroke-linecap="round"/></svg></button>
-    <button class="tbtn" data-tool="hand" data-tip="Pan" data-key="Space"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12.5V5.5a1.5 1.5 0 0 1 3 0V11"/><path d="M11 11V4a1.5 1.5 0 0 1 3 0v7"/><path d="M14 11V5.5a1.5 1.5 0 0 1 3 0V14a6.5 6.5 0 0 1-6.5 6.5h-.7a6 6 0 0 1-4.9-2.6L3.3 14.6a1.5 1.5 0 0 1 2.4-1.8L8 15.5"/></svg></button>
     <div class="bsep"></div>
     <button class="tbtn on" data-tool="pen" data-tip="Pen" data-key="P"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20l1-4.5L16 4.5a2.1 2.1 0 0 1 3 3L8 18.5z"/><path d="M14 6.5l3 3"/></svg><i class="cbar" id="penBar"></i></button>
     <button class="tbtn" data-tool="hl" data-tip="Highlighter" data-key="H"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M9 15l-4.5 4.5H10l1.5-1.5"/><path d="M8.5 14.5l8-10 4 3.2-8 10-4 .3z"/></svg><i class="cbar" id="hlBar"></i></button>
@@ -299,6 +298,7 @@ body.student-locked #pageLabel{pointer-events:none}
         <button class="ibtn" id="redoBtn" data-tip="Redo" data-key="Ctrl Shift Z"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 14l5-5-5-5"/><path d="M20 9H9.5a5.5 5.5 0 0 0 0 11H13"/></svg></button>
   </nav>
   <div class="bar-right">
+    <button class="tbtn" data-tool="hand" data-tip="Pan" data-key="Space"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M8 12.5V5.5a1.5 1.5 0 0 1 3 0V11"/><path d="M11 11V4a1.5 1.5 0 0 1 3 0v7"/><path d="M14 11V5.5a1.5 1.5 0 0 1 3 0V14a6.5 6.5 0 0 1-6.5 6.5h-.7a6 6 0 0 1-4.9-2.6L3.3 14.6a1.5 1.5 0 0 1 2.4-1.8L8 15.5"/></svg></button>
     <button class="ibtn" id="zoomOut" data-tip="Zoom out" data-key="−"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M5 12h14"/></svg></button>
     <button class="ibtn" id="zoomLabel" data-tip="Reset to 100%">100%</button>
     <button class="ibtn" id="zoomIn" data-tip="Zoom in" data-key="+"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg></button>
@@ -1239,7 +1239,7 @@ let lastWorldPt = null;
 function setTool(t) {
   S.styleOpen = false;
   S.tool = t;
-  $$('#toolbar .tbtn[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
+  $$('#bar .tbtn[data-tool]').forEach(b => b.classList.toggle('on', b.dataset.tool === t));
   board.setAttribute('class', 'tool-' + t);
   if (t !== 'select') clearSelection();
   tempG.innerHTML = '';
@@ -2314,7 +2314,7 @@ function chooseShape(id) {
   S.shape = id; $('#shapeIcon').innerHTML = shapeSvg(id); setTool('shape');
   $$('#shapeFly .tbtn').forEach(b => b.classList.toggle('on', b.dataset.shape === id));
 }
-$$('#toolbar .tbtn[data-tool]').forEach(b => b.addEventListener('click', () => {
+$$('#bar .tbtn[data-tool]').forEach(b => b.addEventListener('click', () => {
   if (b.dataset.tool === 'shape') {
     const open = $('#shapeFly').classList.contains('open') || S.tool !== 'shape';
     setTool('shape');
