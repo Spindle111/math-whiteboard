@@ -185,12 +185,12 @@ input.field{-webkit-user-select:text;user-select:text}
 #selTrash.show{display:grid}
 #selTrash svg{width:16px;height:16px}
 #selTrash:hover{background:#e03131;color:#fff;border-color:#e03131}
-/* page turning and new page: bottom right corner; it steps left of the Pages pane when that is open */
-#pageNav{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom, 0px));display:flex;align-items:center;gap:2px;padding:4px;z-index:17}
+/* page turning and new page: always in the bottom right corner; the Pages pane leaves room for it */
+#pageNav{position:fixed;right:14px;bottom:calc(14px + env(safe-area-inset-bottom, 0px));display:flex;align-items:center;gap:2px;padding:4px;z-index:19}
 #pageNav .ibtn{height:38px;min-width:36px}
 #pageNav .pagelabel{min-width:58px;padding:0 6px}
-body.pane-open #pageNav{right:calc(390px + 14px)}
-@media (max-width:700px){body.pane-open #pageNav{right:14px}#syncWarn{bottom:calc(70px + env(safe-area-inset-bottom, 0px))}}
+#pagePop{padding-bottom:calc(72px + env(safe-area-inset-bottom, 0px)) !important}
+@media (max-width:700px){#syncWarn{bottom:calc(70px + env(safe-area-inset-bottom, 0px))}}
 body.student-locked #prevPage,body.student-locked #nextPage,body.student-locked #addPage{display:none}
 body.student-locked #pageLabel{pointer-events:none}
 #toolbar .ibtn{height:40px;min-width:40px;border-radius:10px}
