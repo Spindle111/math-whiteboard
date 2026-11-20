@@ -2001,6 +2001,20 @@ function choose(title, msg, options) {
   });
 }
 let importingPdf = false;
+/* A page that is nothing but a list of "label answer" pairs, e.g. "6f d ff d a1 b" (the end of each
+   question's ID, then the answer letter) or "1 B 2 50 3 C". Every word on the page has to fit that shape. */
+function isAnswerList(txt) {
+  const toks = txt.trim().split(' ').filter(Boolean);
+  if (toks.length < 10 || toks.length % 2) return false;
+  let letters = 0;
+  for (let i = 0; i < toks.length; i += 2) {
+    const label = toks[i].replace(/[.):]+$/, ''), ans = toks[i + 1].replace(/^\(|\)$/g, '');
+    if (!/^[0-9a-z]{1,10}$/i.test(label)) return false;
+    if (/^[a-e]$/i.test(ans)) letters++;
+    else if (!/^-?\d+(\.\d+)?(\/\d+)?$/.test(ans)) return false;
+  }
+  return letters >= toks.length / 4;
+}
 async function isAnswerKeyPage(doc, n) {
   try {
     const page = await doc.getPage(n), tc = await page.getTextContent();
@@ -2008,7 +2022,8 @@ async function isAnswerKeyPage(doc, n) {
     if (/\b(answer\s*key|answer\s*sheet|answers\s*(and|&)\s*explanations|solutions?\s*key|key\s*:)/i.test(txt)) return true;
     if (/^\s*(answers|solutions|key)\b/i.test(txt)) return true;
     const pairs = txt.match(/\b\d{1,2}\s*[.)\-:]?\s*\(?[A-E]\)?(?=\s|$|,)/g) || [];
-    return pairs.length >= 6 && txt.length < pairs.length * 40;
+    if (pairs.length >= 6 && txt.length < pairs.length * 40) return true;
+    return isAnswerList(txt);
   } catch (e) { return false; }
 }
 function pdfPicker(doc, fname) {
