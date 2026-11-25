@@ -3353,10 +3353,24 @@ const Live = {
       if (this.role === 'host') { if (!this.conns.has(from)) return; d.from = from; this.broadcast(d, from); }
       LiveInk.receive(d, this.role === 'host' ? from : (typeof d.from === 'string' ? d.from : 'host')); return;
     }
+    /* "Bring everyone to my view" pressed on the tutor's other device: pass it on to everyone else */
+    if (d.type === 'summon' && this.role === 'host' && from !== 'host') {
+      const e = this.presMap.get(from), v = d.v;
+      if (this.conns.has(from) && e && e.pres && e.pres.tu && v && isNum(v.cx) && isNum(v.cy) && isNum(v.z) && isStr(v.p, 48)) this.broadcast({ type: 'summon', v, by: from }, from);
+      return;
+    }
     if (from !== 'host') return;
     if (d.type === 'presAll' && Array.isArray(d.list)) { for (const [k, p] of d.list) if (typeof k === 'string' && k !== this.me && p && typeof p === 'object') this.presMap.set(k, { pres: p, t: Date.now() }); this.refreshPeers(); }
     else if (d.type === 'left' && typeof d.peer === 'string') { this.presMap.delete(d.peer); if (this.following === d.peer) this.unfollow(true); this.refreshPeers(); }
-    else if (d.type === 'summon' && d.v) { const v = d.v; if (isNum(v.cx) && isNum(v.cy) && isNum(v.z) && isStr(v.p, 48)) { this.jumpTo(v); toast('Your tutor brought you to their view'); } }
+    else if (d.type === 'summon' && d.v) {
+      const v = d.v; if (!(isNum(v.cx) && isNum(v.cy) && isNum(v.z) && isStr(v.p, 48))) return;
+      /* keep following the device that pressed the button, not whichever tutor device led before */
+      const by = typeof d.by === 'string' && this.presMap.has(d.by) ? d.by : 'mtb-' + this.code;
+      if (by !== this.me) { this.leadPeer = by; this.leadKey = [by, v.p, v.cx, v.cy, v.z, v.w, v.h].join('|'); this.lastHostPage = v.p; if (this.isLockedStudent()) this.tv = v; }
+      if (this.following) this.unfollow(true);
+      this.jumpTo(v);
+      if (!this.tutorClient) toast('Your tutor brought you to their view');
+    }
   },
   sendRaw(msg) {
     if (!this.connected) return;
@@ -3486,7 +3500,14 @@ const Live = {
   follow(peer) { this.following = peer; this.applyFollow(); this.renderPop(); this.renderChip(); },
   unfollow(silent) { if (!this.following) return; this.following = null; if (!silent) toast('Stopped following'); this.renderPop(); this.renderChip(); },
   applyFollow() { const p = this.peers.find(x => x.peer === this.following); const v = p && p.presence && p.presence.view; if (v && isNum(v.cx) && isNum(v.cy) && isNum(v.z) && isStr(v.p, 48)) this.jumpTo(v); },
-  summon() { if (this.role !== 'host') return; this.broadcast({ type: 'summon', v: this.viewObj() }); toast('Everyone is now looking at your view'); },
+  summon() {
+    const v = this.viewObj();
+    /* the tutor's own devices each tell everyone: the student follows whichever one pressed it */
+    if (this.role === 'host') { this.leadPeer = null; this.leadKey = null; this.broadcast({ type: 'summon', v, by: this.me }); }
+    else if (this.tutorClient && this.hostConn && this.hostConn.open && this.status === 'connected') { this.flushPres(); try { this.hostConn.send({ type: 'summon', v }); } catch { toast('Couldn’t reach the live session. Try again in a moment.'); return; } }
+    else { toast('Not connected to the live session yet'); return; }
+    toast('Everyone is now looking at your view');
+  },
   renderChip() {
     const chip = $('#liveChip'), o = this.others();
     const bcp = $('#boardChip'); if (bcp) bcp.classList.toggle('live', o.length > 0);
