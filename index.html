@@ -2788,7 +2788,18 @@ function validRec(r, fromFile) {
    ========================================================= */
 const randCode = (n = 7) => { const a = 'abcdefghjkmnpqrstuvwxyz23456789'; let s = ''; const r = crypto.getRandomValues(new Uint8Array(n)); for (const x of r) s += a[x % a.length]; return s; };
 const PEER_OPTS = Object.assign({ debug: 0 }, window.MB_PEER_OPTS || {});
-const TUTOR_CODE = (() => { let c = store.get('mb.tutorCode', null); if (!(typeof c === 'string' && /^[a-z0-9]{6,12}$/.test(c))) { c = randCode(8); store.set('mb.tutorCode', c); } return c; })();
+let TUTOR_FRESH = false; // true when this page had to make a new tutor code (none was saved)
+const okTutorCode = c => typeof c === 'string' && /^[a-z0-9]{6,12}$/.test(c);
+const TUTOR_CODE = (() => { let c = store.get('mb.tutorCode', null); if (!okTutorCode(c)) { c = randCode(8); store.set('mb.tutorCode', c); TUTOR_FRESH = true; } return c; })();
+/* Keep this device's tutor code safe: ask Safari/Chrome to keep the site's saved data
+   permanently, and keep a second copy in IndexedDB. If the first copy is lost, the
+   second brings it back (and the page reloads with the student list). */
+async function keepTutorCode() {
+  try { if (navigator.storage && navigator.storage.persist && !(await navigator.storage.persisted())) await navigator.storage.persist(); } catch {}
+  const saved = await idb.get('mb.tutorCode');
+  if (TUTOR_FRESH && okTutorCode(saved) && saved !== TUTOR_CODE && store.set('mb.tutorCode', saved) && store.get('mb.tutorCode', null) === saved) { location.reload(); return; }
+  if (saved !== TUTOR_CODE) idb.set('mb.tutorCode', TUTOR_CODE);
+}
 const baseUrl = () => location.origin + location.pathname;
 
 /* ---------- students (tutor side) ---------- */
@@ -3798,7 +3809,7 @@ setTool('pen'); updateUndoUI(); updateBoardChip();
   applySheet(); if (!V) V = defaultView();
   renderPage(); applyView(true); updatePageUI(); updateUndoUI(); syncAddressBar();
   syncLook();
-  Live.init(); handlePairing(); Cloud.init();
+  keepTutorCode(); Live.init(); handlePairing(); Cloud.init();
   Blobs.sweepSoon(9000);
   setInterval(updateSyncWarn, 2000);
 })();
